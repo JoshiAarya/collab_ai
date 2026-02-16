@@ -33,7 +33,7 @@ const projectSchema = new mongoose.Schema({
   activeLLM: {
     provider: {
       type: String,
-      enum: ['groq', 'gemini', 'openai', 'claude', 'deepseek', 'server'],
+      enum: ['groq', 'gemini', 'openai', 'claude', 'deepseek', 'anthropic', 'google', 'server'],
       default: 'server'
     },
     model: {
@@ -41,6 +41,11 @@ const projectSchema = new mongoose.Schema({
       default: 'llama-3.1-8b-instant'
     },
     apiKey: String // encrypted in production
+  },
+  apiKeys: {
+    type: Map,
+    of: String,
+    default: {}
   },
   stage: {
     type: String,

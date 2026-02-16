@@ -40,12 +40,16 @@ class SummaryService {
   }
 
   // Get discussion summaries
-  async getDiscussionSummaries(discussionId) {
+  async getDiscussionSummaries(discussionId, limit = null) {
     try {
-      const summaries = await Summary.find({ discussionId })
-        .sort({ createdAt: -1 })
-        .lean();
+      let query = Summary.find({ discussionId })
+        .sort({ createdAt: -1 });
+      
+      if (limit) {
+        query = query.limit(limit);
+      }
 
+      const summaries = await query.lean();
       return summaries;
     } catch (error) {
       console.error('Error getting discussion summaries:', error);
@@ -64,6 +68,43 @@ class SummaryService {
     } catch (error) {
       console.error('Error getting summaries by type:', error);
       return [];
+    }
+  }
+
+  // Get summary by ID
+  async getSummaryById(summaryId) {
+    try {
+      const summary = await Summary.findById(summaryId).lean();
+      return summary;
+    } catch (error) {
+      console.error('Error getting summary by ID:', error);
+      return null;
+    }
+  }
+
+  // Update summary
+  async updateSummary(summaryId, newContent) {
+    try {
+      const summary = await Summary.findByIdAndUpdate(
+        summaryId,
+        { content: newContent },
+        { new: true }
+      ).lean();
+      return summary;
+    } catch (error) {
+      console.error('Error updating summary:', error);
+      throw error;
+    }
+  }
+
+  // Delete summary
+  async deleteSummary(summaryId) {
+    try {
+      await Summary.findByIdAndDelete(summaryId);
+      return true;
+    } catch (error) {
+      console.error('Error deleting summary:', error);
+      throw error;
     }
   }
 }

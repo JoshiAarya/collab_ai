@@ -195,6 +195,43 @@ class ProjectService {
       return false;
     }
   }
+
+  // Set API key for provider
+  async setProjectApiKey(projectId, provider, apiKey) {
+    try {
+      const project = await Project.findById(projectId);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      if (!project.apiKeys) {
+        project.apiKeys = new Map();
+      }
+      
+      project.apiKeys.set(provider, apiKey);
+      await project.save();
+      
+      return project;
+    } catch (error) {
+      console.error('Error setting API key:', error);
+      throw error;
+    }
+  }
+
+  // Get API key for provider
+  async getProjectApiKey(projectId, provider) {
+    try {
+      const project = await Project.findById(projectId);
+      if (!project || !project.apiKeys) {
+        return null;
+      }
+      
+      return project.apiKeys.get(provider);
+    } catch (error) {
+      console.error('Error getting API key:', error);
+      return null;
+    }
+  }
 }
 
 export default new ProjectService();

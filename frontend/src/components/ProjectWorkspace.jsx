@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import ModelSelector from './ModelSelector';
+import Sidebar from './Sidebar';
+import { getAvatarColor, getInitials } from '../utils/avatarColors';
 
 export default function ProjectWorkspace({ project, onBack }) {
   const [discussions, setDiscussions] = useState([]);
@@ -16,12 +19,20 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
+  const [showSummaries, setShowSummaries] = useState(false);
   const [showCreateDiscussion, setShowCreateDiscussion] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showInviteToDiscussion, setShowInviteToDiscussion] = useState(false);
   const [inviteDiscussionId, setInviteDiscussionId] = useState(null);
-  const [showModelSelector, setShowModelSelector] = useState(false);
   const [currentModel, setCurrentModel] = useState(project.activeLLM || { provider: 'groq', model: 'llama-3.1-8b-instant' });
+  
+  // State awareness
+  const [isLoadingDiscussions, setIsLoadingDiscussions] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [wsStatus, setWsStatus] = useState('connecting'); // connecting, connected, disconnected, reconnecting
+  const [aiThinking, setAiThinking] = useState(false);
+  
   const { token, user } = useAuth();
   const endRef = useRef(null);
   const textareaRef = useRef(null);
@@ -81,6 +92,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   }, [input]);
 
   const loadDiscussions = async () => {
+    setIsLoadingDiscussions(true);
     try {
       const response = await fetch(
         `http://localhost:8080/api/projects/${project._id}/discussions`,
@@ -88,11 +100,9 @@ export default function ProjectWorkspace({ project, onBack }) {
       );
       const data = await response.json();
       if (data.success) {
-        // Filter discussions to only show ones user is a participant in (or owner sees all)
         const userDiscussions = data.discussions.filter(d => {
-          if (isOwner) return true; // Owner sees all
-          if (d.isMain) return true; // Everyone sees main
-          // Check if user is a participant
+          if (isOwner) return true;
+          if (d.isMain) return true;
           return d.participants?.some(p => p._id === user._id);
         });
         
@@ -104,13 +114,17 @@ export default function ProjectWorkspace({ project, onBack }) {
       }
     } catch (error) {
       console.error('Error loading discussions:', error);
+    } finally {
+      setIsLoadingDiscussions(false);
     }
   };
 
   const connectWebSocket = () => {
+    setWsStatus('connecting');
     const socket = new WebSocket('ws://localhost:8080');
     
     socket.onopen = () => {
+      setWsStatus('connected');
       socket.send(JSON.stringify({ type: 'auth', token }));
     };
 
@@ -119,9 +133,34 @@ export default function ProjectWorkspace({ project, onBack }) {
       
       if (data.type === 'discussion-joined') {
         setMessages(data.messages);
+        setIsLoadingMessages(false);
       } else if (data.type === 'project-chat') {
         setMessages(prev => [...prev, data.message]);
+        setIsSendingMessage(false);
+        
+        // Check if AI is responding
+        if (data.message.isAI) {
+          setAiThinking(false);
+        }
+      } else if (data.type === 'error') {
+        setIsSendingMessage(false);
+        setAiThinking(false);
       }
+    };
+
+    socket.onclose = () => {
+      setWsStatus('disconnected');
+      // Auto-reconnect after 3 seconds
+      setTimeout(() => {
+        if (wsStatus !== 'connected') {
+          setWsStatus('reconnecting');
+          connectWebSocket();
+        }
+      }, 3000);
+    };
+
+    socket.onerror = () => {
+      setWsStatus('disconnected');
     };
 
     setWs(socket);
@@ -130,6 +169,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   const switchDiscussion = (discussion) => {
     setCurrentDiscussion(discussion);
     setMessages([]);
+    setIsLoadingMessages(true);
     
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -141,7 +181,14 @@ export default function ProjectWorkspace({ project, onBack }) {
   };
 
   const sendMessage = () => {
-    if (!input.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!input.trim() || !ws || ws.readyState !== WebSocket.OPEN || isSendingMessage) return;
+    
+    setIsSendingMessage(true);
+    
+    // Check if mentioning AI
+    if (input.includes('@CollabAI')) {
+      setAiThinking(true);
+    }
     
     ws.send(JSON.stringify({
       type: 'project-chat',
@@ -206,22 +253,22 @@ export default function ProjectWorkspace({ project, onBack }) {
     return <Documents project={project} onClose={() => setShowDocuments(false)} token={token} />;
   }
 
+  if (showSummaries && currentDiscussion) {
+    return <Summaries 
+      project={project} 
+      discussion={currentDiscussion}
+      onClose={() => setShowSummaries(false)} 
+      token={token} 
+    />;
+  }
+
   return (
     <div style={styles.container}>
-      {/* Icon Bar (always visible) */}
-      <div style={styles.iconBar}>
-        <button 
-          onClick={() => setSidebarOpen(!sidebarOpen)} 
-          style={styles.iconBarBtn}
-          title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <path d="M9 3v18"/>
-          </svg>
-        </button>
-
-        {!sidebarOpen && (
+      {/* Sidebar */}
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        iconBarContent={
           <>
             <button onClick={onBack} style={styles.iconBarBtn} title="Back to projects">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -241,216 +288,121 @@ export default function ProjectWorkspace({ project, onBack }) {
 
             <div style={{ flex: 1 }}></div>
 
-            <div style={styles.iconBarUser}>
-              {user?.username?.charAt(0).toUpperCase()}
+            <div style={{
+              ...styles.iconBarUser,
+              background: getAvatarColor(user?.username)
+            }}>
+              {getInitials(user?.username)}
             </div>
           </>
-        )}
-      </div>
-
-      {/* Sidebar (slides in/out) */}
-      {sidebarOpen && (
-        <div style={styles.sidebar}>
-          <div style={styles.sidebarHeader}>
-            <button onClick={onBack} style={styles.sidebarHeaderBtn}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-              </svg>
-              <span>Projects</span>
-            </button>
-            <button 
-              onClick={() => setSidebarOpen(false)} 
-              style={styles.closeSidebarBtn}
-              title="Close sidebar"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-
-          <div style={styles.discussionsList}>
-            <div style={styles.discussionsHeader}>
-              <span style={styles.discussionsLabel}>Discussions</span>
-              <button 
-                onClick={() => setShowCreateDiscussion(true)}
-                style={styles.addDiscussionBtn}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-              </button>
-            </div>
-            
-            {discussions.map(disc => {
-              const isParticipant = disc.participants?.some(p => p._id === user._id) || isOwner;
-              const displayTitle = disc.isMain ? '# Main Thread' : disc.title;
-              
-              return (
-                <div
-                  key={disc._id}
-                  style={{
-                    ...styles.discussionItem,
-                    background: currentDiscussion?._id === disc._id ? 'rgba(255,255,255,0.1)' : 'transparent',
-                    fontWeight: disc.isMain ? '600' : '400',
-                    borderLeft: disc.isMain ? '3px solid #10a37f' : 'none',
-                    paddingLeft: disc.isMain ? '9px' : '12px'
-                  }}
-                >
-                  <div 
-                    onClick={() => switchDiscussion(disc)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}
-                  >
-                    {disc.isMain ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4z"/>
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                      </svg>
-                    )}
-                    <span style={styles.discussionName}>{displayTitle}</span>
-                  </div>
-                  {isParticipant && !disc.isMain && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setInviteDiscussionId(disc._id);
-                        setShowInviteToDiscussion(true);
-                      }}
-                      style={styles.inviteDiscussionBtn}
-                      title="Invite member to discussion"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                        <circle cx="8.5" cy="7" r="4"/>
-                        <line x1="20" y1="8" x2="20" y2="14"/>
-                        <line x1="23" y1="11" x2="17" y2="11"/>
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={styles.sidebarFooter}>
-            <div style={styles.userSection}>
-              <div style={styles.userAvatar}>
-                {user?.username?.charAt(0).toUpperCase()}
-              </div>
-              <div style={styles.userInfo}>
-                <div style={styles.userName}>{user?.username}</div>
-              </div>
-            </div>
-          </div>
+        }
+      >
+        <div style={styles.sidebarHeader}>
+          <button onClick={onBack} style={styles.sidebarHeaderBtn}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            <span>Projects</span>
+          </button>
+          <button 
+            onClick={() => setSidebarOpen(false)} 
+            style={styles.closeSidebarBtn}
+            title="Close sidebar"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
-      )}
+
+        <div style={styles.discussionsList}>
+          <div style={styles.discussionsHeader}>
+            <span style={styles.discussionsLabel}>Discussions</span>
+            <button 
+              onClick={() => setShowCreateDiscussion(true)}
+              style={styles.addDiscussionBtn}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+          </div>
+          
+          {isLoadingDiscussions ? (
+            <div style={{padding: '20px', textAlign: 'center'}}>
+              <div style={{...styles.loadingSpinner, margin: '0 auto'}}></div>
+            </div>
+          ) : discussions.length === 0 ? (
+            <div style={{padding: '20px', textAlign: 'center', color: '#8e8ea0', fontSize: '14px'}}>
+              No discussions yet
+            </div>
+          ) : (
+            discussions.map(disc => {
+            const isParticipant = disc.participants?.some(p => p._id === user._id) || isOwner;
+            const displayTitle = disc.isMain ? '# Main Thread' : disc.title;
+            
+            return (
+              <div
+                key={disc._id}
+                style={{
+                  ...styles.discussionItem,
+                  background: currentDiscussion?._id === disc._id ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  fontWeight: disc.isMain ? '600' : '400',
+                  borderLeft: disc.isMain ? '3px solid #10a37f' : 'none',
+                  paddingLeft: disc.isMain ? '9px' : '12px'
+                }}
+              >
+                <div 
+                  onClick={() => switchDiscussion(disc)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}
+                >
+                  {disc.isMain ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4z"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  )}
+                  <span style={styles.discussionName}>{displayTitle}</span>
+                </div>
+                {isParticipant && !disc.isMain && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInviteDiscussionId(disc._id);
+                      setShowInviteToDiscussion(true);
+                    }}
+                    style={styles.inviteDiscussionBtn}
+                    title="Invite member to discussion"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="8.5" cy="7" r="4"/>
+                      <line x1="20" y1="8" x2="20" y2="14"/>
+                      <line x1="23" y1="11" x2="17" y2="11"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            );
+          })
+          )}
+        </div>
+      </Sidebar>
 
       {/* Main */}
       <div style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerTitle}>
-            {/* Model Selector */}
-            <div style={{ position: 'relative', marginRight: '16px' }}>
-              <button 
-                onClick={() => setShowModelSelector(!showModelSelector)}
-                style={styles.modelSelector}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"/>
-                </svg>
-                <span>{currentModel.provider === 'groq' ? 'Groq' : currentModel.provider}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-              </button>
-
-              {showModelSelector && (
-                <div style={styles.modelDropdown}>
-                  <input
-                    type="text"
-                    placeholder="Search models..."
-                    style={styles.modelSearch}
-                    autoFocus
-                  />
-                  
-                  <div style={styles.modelProviderSection}>
-                    <div 
-                      onClick={() => {
-                        setCurrentModel({ provider: 'groq', model: 'llama-3.1-8b-instant' });
-                        setShowModelSelector(false);
-                      }}
-                      style={styles.modelProvider}
-                    >
-                      <div style={styles.modelProviderIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#f55036">
-                          <circle cx="12" cy="12" r="10"/>
-                        </svg>
-                      </div>
-                      <span style={styles.modelProviderName}>Groq</span>
-                      <div style={{ flex: 1 }}></div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 18l6-6-6-6"/>
-                      </svg>
-                    </div>
-                  </div>
-
-                  <div style={styles.modelProviderSection}>
-                    <div style={{...styles.modelProvider, opacity: 0.5, cursor: 'not-allowed'}}>
-                      <div style={styles.modelProviderIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10a37f" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10"/>
-                          <path d="M12 8v8M8 12h8"/>
-                        </svg>
-                      </div>
-                      <span style={styles.modelProviderName}>OpenAI</span>
-                      <span style={styles.comingSoon}>Coming soon</span>
-                    </div>
-                  </div>
-
-                  <div style={styles.modelProviderSection}>
-                    <div style={{...styles.modelProvider, opacity: 0.5, cursor: 'not-allowed'}}>
-                      <div style={styles.modelProviderIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#d4a574">
-                          <rect x="4" y="4" width="16" height="16" rx="2"/>
-                        </svg>
-                      </div>
-                      <span style={styles.modelProviderName}>Anthropic</span>
-                      <span style={styles.comingSoon}>Coming soon</span>
-                    </div>
-                  </div>
-
-                  <div style={styles.modelProviderSection}>
-                    <div style={{...styles.modelProvider, opacity: 0.5, cursor: 'not-allowed'}}>
-                      <div style={styles.modelProviderIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#4285f4">
-                          <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                        </svg>
-                      </div>
-                      <span style={styles.modelProviderName}>Google</span>
-                      <span style={styles.comingSoon}>Coming soon</span>
-                    </div>
-                  </div>
-
-                  <div style={styles.modelProviderSection}>
-                    <div style={{...styles.modelProvider, opacity: 0.5, cursor: 'not-allowed'}}>
-                      <div style={styles.modelProviderIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff9d00">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                      </div>
-                      <span style={styles.modelProviderName}>HuggingFace</span>
-                      <span style={styles.comingSoon}>Coming soon</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
+            <ModelSelector 
+              currentModel={currentModel}
+              onModelChange={setCurrentModel}
+              projectId={project._id}
+              token={token}
+            />
             <h2 style={styles.title}>{currentDiscussion?.title || project.title}</h2>
           </div>
 
@@ -477,6 +429,12 @@ export default function ProjectWorkspace({ project, onBack }) {
                   </svg>
                   Documents
                 </button>
+                <button onClick={() => { setShowSummaries(true); setShowMenu(false); }} style={styles.dropdownItem}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                  </svg>
+                  Summaries
+                </button>
                 <button onClick={() => { setShowSettings(true); setShowMenu(false); }} style={styles.dropdownItem}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"/>
@@ -495,16 +453,43 @@ export default function ProjectWorkspace({ project, onBack }) {
         </div>
 
         <div style={styles.messages}>
-          {messages.length === 0 ? (
+          {isLoadingMessages ? (
+            <div style={styles.loadingState}>
+              <div style={styles.loadingSpinner}></div>
+              <p style={styles.loadingText}>Loading messages...</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div style={styles.empty}>
               <h2 style={styles.emptyTitle}>{currentDiscussion?.title || project.title}</h2>
               <p style={styles.emptyText}>Start the conversation</p>
+              <p style={styles.emptyHint}>Use @CollabAI to get AI assistance</p>
             </div>
           ) : (
-            messages.map((m, i) => <MessageBubble key={i} message={m} />)
+            <>
+              {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} />)}
+              {aiThinking && (
+                <div style={styles.aiThinkingIndicator}>
+                  <div style={{maxWidth: '48rem', margin: '0 auto', padding: '0 24px', display: 'flex', gap: '24px'}}>
+                    <div style={styles.aiAvatar}>C</div>
+                    <div className="thinking-dots" style={styles.thinkingDots}>
+                      <span></span><span></span><span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
           <div ref={endRef}></div>
         </div>
+
+        {/* Connection Status Banner */}
+        {wsStatus !== 'connected' && (
+          <div style={styles.statusBanner}>
+            {wsStatus === 'connecting' && '🔄 Connecting...'}
+            {wsStatus === 'reconnecting' && '🔄 Reconnecting...'}
+            {wsStatus === 'disconnected' && '⚠️ Disconnected - Attempting to reconnect...'}
+          </div>
+        )}
 
         <div style={styles.inputArea}>
           {showMentions && (
@@ -661,29 +646,64 @@ export default function ProjectWorkspace({ project, onBack }) {
   );
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, currentUser }) {
   const isAI = message.user === 'CollabAI';
+  const isCurrentUser = message.user === currentUser;
   const safeHTML = DOMPurify.sanitize(marked.parse(message.text || ''));
+  const avatarColor = getAvatarColor(message.user);
   
   return (
     <div style={{
-      ...styles.messageRow,
-      background: isAI ? '#444654' : 'transparent'
+      padding: '24px 0',
+      width: '100%',
+      background: isAI ? '#1a1a1a' : 'transparent',
+      borderBottom: '1px solid #2d2d2d'
     }}>
-      <div style={styles.messageContent}>
-        <div style={styles.avatar}>
+      <div style={{
+        maxWidth: '48rem',
+        margin: '0 auto',
+        padding: '0 24px',
+        display: 'flex',
+        gap: '16px',
+        flexDirection: isCurrentUser && !isAI ? 'row-reverse' : 'row',
+        alignItems: 'flex-start',
+        justifyContent: isCurrentUser && !isAI ? 'flex-end' : 'flex-start'
+      }}>
+        <div style={{
+          flexShrink: 0,
+          paddingTop: '4px'
+        }}>
           {isAI ? (
             <div style={styles.aiAvatar}>
-              C
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
             </div>
           ) : (
-            <div style={styles.messageUserAvatar}>
-              {message.user.charAt(0).toUpperCase()}
+            <div style={{
+              ...styles.messageUserAvatar,
+              background: avatarColor
+            }}>
+              {getInitials(message.user)}
             </div>
           )}
         </div>
-        <div style={styles.messageBody}>
-          <div style={styles.messageName}>{message.user}</div>
+        <div style={{
+          flex: 1,
+          minWidth: 0,
+          maxWidth: '100%',
+          textAlign: isCurrentUser && !isAI ? 'right' : 'left'
+        }}>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '600',
+            color: '#ececec',
+            marginBottom: '8px'
+          }}>
+            {message.user}
+          </div>
           <div 
             className="markdown-content"
             dangerouslySetInnerHTML={{ __html: safeHTML }}
@@ -700,24 +720,33 @@ function CreateDiscussionModal({ onClose, onCreate }) {
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h3 style={styles.modalTitle}>Create New Discussion</h3>
-        <input
-          type="text"
-          placeholder="Discussion name..."
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={styles.modalInput}
-          autoFocus
-        />
-        <div style={styles.modalActions}>
-          <button onClick={onClose} style={styles.modalCancel}>Cancel</button>
-          <button 
-            onClick={() => name.trim() && onCreate(name.trim())} 
-            style={styles.modalSubmit}
-            disabled={!name.trim()}
-          >
-            Create
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>Create New Discussion</h3>
+          <button onClick={onClose} style={styles.modalClose}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
           </button>
+        </div>
+        <div style={styles.modalBody}>
+          <input
+            type="text"
+            placeholder="Discussion name..."
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={styles.modalInput}
+            autoFocus
+          />
+          <div style={styles.modalActions}>
+            <button onClick={onClose} style={styles.modalCancel}>Cancel</button>
+            <button 
+              onClick={() => name.trim() && onCreate(name.trim())} 
+              style={styles.modalSubmit}
+              disabled={!name.trim()}
+            >
+              Create
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -725,9 +754,13 @@ function CreateDiscussionModal({ onClose, onCreate }) {
 }
 
 function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvite }) {
-  const [members, setMembers] = useState([]);
   const [discussion, setDiscussion] = useState(null);
+  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [activeTab, setActiveTab] = useState('members'); // 'members' or 'external'
 
   useEffect(() => {
     loadData();
@@ -735,7 +768,7 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 
   const loadData = async () => {
     try {
-      // Load discussion details
+      // Load discussion
       const discResponse = await fetch(
         `http://localhost:8080/api/projects/${project._id}/discussions`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -746,7 +779,7 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
         setDiscussion(disc);
       }
 
-      // Load full project data with populated members
+      // Load project members
       const projectResponse = await fetch(
         `http://localhost:8080/api/projects/${project._id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -754,20 +787,15 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
       const projectData = await projectResponse.json();
       if (projectData.success && projectData.project) {
         setMembers(projectData.project.members || []);
-      } else {
-        // Fallback to project prop
-        setMembers(project.members || []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      // Fallback to project prop
-      setMembers(project.members || []);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInvite = async (userId) => {
+  const handleAddMember = async (userId) => {
     try {
       const response = await fetch(
         `http://localhost:8080/api/projects/${project._id}/discussions/${discussionId}/invite`,
@@ -783,56 +811,168 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
       const data = await response.json();
       if (data.success) {
         onInvite();
-        loadData(); // Refresh to show updated participants
+        loadData(); // Refresh
       }
     } catch (error) {
-      console.error('Error inviting member:', error);
+      console.error('Error adding member:', error);
+    }
+  };
+
+  const inviteLink = `${window.location.origin}/join/${project.inviteCode}?discussion=${discussionId}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailInput.trim()) {
+      alert('Please enter an email address');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      alert(`Invite link to send to ${emailInput}:\n\n${inviteLink}\n\n(Email service will be integrated soon)`);
+      setEmailInput('');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('Failed to send email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
   const participantIds = discussion?.participants?.map(p => p._id || p) || [];
   const availableMembers = members
-    .map(m => m.userId || m) // Extract userId if it's nested
+    .map(m => m.userId || m)
     .filter(m => m && m._id && !participantIds.includes(m._id));
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h3 style={styles.modalTitle}>Invite to {discussion?.title}</h3>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>Invite to {discussion?.title || 'Discussion'}</h3>
+          <button onClick={onClose} style={styles.modalClose}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
         
         {loading ? (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#8e8ea0' }}>Loading...</div>
-        ) : availableMembers.length === 0 ? (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#8e8ea0' }}>
-            All project members are already in this discussion
-          </div>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#b4b4b4' }}>Loading...</div>
         ) : (
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {availableMembers.map(member => (
-              <div key={member._id} style={styles.memberInviteItem}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={styles.memberAvatar}>
-                    {member.username ? member.username.charAt(0).toUpperCase() : '?'}
+          <div style={styles.modalBody}>
+            {/* Tabs */}
+            <div style={styles.tabs}>
+              <button
+                onClick={() => setActiveTab('members')}
+                style={{
+                  ...styles.tab,
+                  borderBottom: activeTab === 'members' ? '2px solid #8b5cf6' : '2px solid transparent',
+                  color: activeTab === 'members' ? '#ececec' : '#6b6b6b'
+                }}
+              >
+                Project Members
+              </button>
+              <button
+                onClick={() => setActiveTab('external')}
+                style={{
+                  ...styles.tab,
+                  borderBottom: activeTab === 'external' ? '2px solid #8b5cf6' : '2px solid transparent',
+                  color: activeTab === 'external' ? '#ececec' : '#6b6b6b'
+                }}
+              >
+                External Invite
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'members' ? (
+              <div style={styles.tabContent}>
+                {availableMembers.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#b4b4b4' }}>
+                    All project members are already in this discussion
                   </div>
-                  <div>
-                    <div style={{ color: '#ececf1', fontSize: '14px' }}>{member.username || 'Unknown'}</div>
-                    <div style={{ color: '#8e8ea0', fontSize: '12px' }}>{member.email || ''}</div>
+                ) : (
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {availableMembers.map(member => (
+                      <div key={member._id} style={styles.memberItem}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={styles.memberAvatar}>
+                            {member.username ? member.username.charAt(0).toUpperCase() : '?'}
+                          </div>
+                          <div>
+                            <div style={{ color: '#ececec', fontSize: '14px' }}>{member.username || 'Unknown'}</div>
+                            <div style={{ color: '#b4b4b4', fontSize: '12px' }}>{member.email || ''}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleAddMember(member._id)}
+                          style={styles.addBtn}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <button
-                  onClick={() => handleInvite(member._id)}
-                  style={styles.inviteBtn}
-                >
-                  Invite
-                </button>
+                )}
               </div>
-            ))}
+            ) : (
+              <div style={styles.tabContent}>
+                <p style={styles.inviteDesc}>
+                  Share this link with people outside the project:
+                </p>
+
+                <div style={styles.linkBox}>
+                  <code style={styles.linkText}>{inviteLink}</code>
+                  <button onClick={handleCopyLink} style={styles.copyLinkBtn} title="Copy link">
+                    {copied ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+
+                <div style={styles.divider}>
+                  <span style={styles.dividerText}>OR</span>
+                </div>
+
+                <div style={styles.emailSection}>
+                  <label style={styles.emailLabel}>Send via email</label>
+                  <div style={styles.emailInputGroup}>
+                    <input
+                      type="email"
+                      placeholder="colleague@company.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      style={styles.emailInput}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendEmail()}
+                    />
+                    <button 
+                      onClick={handleSendEmail} 
+                      style={styles.sendEmailBtn}
+                      disabled={sendingEmail || !emailInput.trim()}
+                    >
+                      {sendingEmail ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                  <p style={styles.emailHint}>
+                    They'll receive an email with the invite link
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
-
-        <div style={styles.modalActions}>
-          <button onClick={onClose} style={styles.modalCancel}>Close</button>
-        </div>
       </div>
     </div>
   );
@@ -841,12 +981,14 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 function Dashboard({ project, onClose, token }) {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
   const loadDashboard = async () => {
+    setLoading(true);
     try {
       const response = await fetch(
         `http://localhost:8080/api/projects/${project._id}/dashboard`,
@@ -855,6 +997,7 @@ function Dashboard({ project, onClose, token }) {
       const data = await response.json();
       if (data.success) {
         setDashboard(data.dashboard);
+        setLastUpdated(new Date());
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -863,86 +1006,340 @@ function Dashboard({ project, onClose, token }) {
     }
   };
 
+  const getTimeAgo = () => {
+    const seconds = Math.floor((new Date() - lastUpdated) / 1000);
+    if (seconds < 60) return `${seconds} secs ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} mins ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} hours ago`;
+  };
+
+  const getStageColor = (stage) => {
+    const colors = {
+      'ideation': '#8b5cf6',
+      'design': '#3b82f6',
+      'discussion': '#10b981',
+      'blocked': '#ef4444',
+      'completed': '#06b6d4'
+    };
+    return colors[stage] || '#6b7280';
+  };
+
   return (
-    <div style={styles.fullPage}>
-      <div style={styles.pageHeader}>
-        <button onClick={onClose} style={styles.backButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Back
-        </button>
-        <h1 style={styles.pageTitle}>Dashboard</h1>
-        <button onClick={loadDashboard} style={styles.refreshButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div style={styles.dashboardPage}>
+      {/* Header */}
+      <div style={styles.dashboardHeader}>
+        <div style={styles.dashboardHeaderLeft}>
+          <button onClick={onClose} style={styles.dashboardBackBtn}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back
+          </button>
+          <div>
+            <h1 style={styles.dashboardTitle}>Dashboard</h1>
+            <p style={styles.dashboardSubtitle}>{project.title}</p>
+          </div>
+        </div>
+        <button onClick={loadDashboard} style={styles.dashboardRefreshBtn} disabled={loading}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}>
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
           </svg>
+          Refresh
         </button>
       </div>
 
-      {loading ? (
-        <div style={styles.pageLoading}>Loading...</div>
+      {loading && !dashboard ? (
+        <div style={styles.dashboardLoading}>
+          <div style={styles.loadingSpinner}></div>
+          <p style={styles.loadingText}>Loading insights...</p>
+        </div>
       ) : dashboard ? (
-        <div style={styles.pageContent}>
-          <div style={styles.statsGrid}>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Messages</div>
-              <div style={styles.statValue}>{dashboard.totalMessages}</div>
+        <div style={styles.dashboardContent}>
+          {/* Stats Cards */}
+          <div style={styles.statsRow}>
+            <div style={styles.statCardNew}>
+              <div style={styles.statIconBox}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <div style={styles.statContent}>
+                <div style={styles.statLabelNew}>Total Messages</div>
+                <div style={styles.statValueNew}>{dashboard.totalMessages}</div>
+              </div>
             </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Discussions</div>
-              <div style={styles.statValue}>{dashboard.activeDiscussions}</div>
+
+            <div style={styles.statCardNew}>
+              <div style={styles.statIconBox}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div style={styles.statContent}>
+                <div style={styles.statLabelNew}>Active Discussions</div>
+                <div style={styles.statValueNew}>{dashboard.activeDiscussions}</div>
+              </div>
             </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Documents</div>
-              <div style={styles.statValue}>{dashboard.documentCount}</div>
+
+            <div style={styles.statCardNew}>
+              <div style={styles.statIconBox}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                </svg>
+              </div>
+              <div style={styles.statContent}>
+                <div style={styles.statLabelNew}>Documents</div>
+                <div style={styles.statValueNew}>{dashboard.documentCount}</div>
+              </div>
             </div>
           </div>
 
-          <div style={styles.insightSection}>
-            <h3 style={styles.insightTitle}>Current Topics</h3>
-            <div style={styles.topicsList}>
-              {dashboard.topics?.length > 0 ? (
-                dashboard.topics.map((topic, i) => (
-                  <div key={i} style={styles.topicTag}>{topic}</div>
-                ))
-              ) : (
-                <p style={styles.emptyText}>No topics identified yet</p>
-              )}
+          {/* Main Grid */}
+          <div style={styles.dashboardGrid}>
+            {/* Left Column */}
+            <div style={styles.dashboardLeftCol}>
+              {/* Topics & Insights */}
+              <div style={styles.dashboardCard}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>Topics & Insights</h3>
+                  <button style={styles.cardMenuBtn}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Current Topics</div>
+                  <div style={styles.topicsGrid}>
+                    {dashboard.topics?.length > 0 ? (
+                      dashboard.topics.map((topic, i) => (
+                        <div key={i} style={styles.topicBadge}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink: 0}}>
+                            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                          </svg>
+                          {topic}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={styles.emptyMessage}>No topics identified yet</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Key Decisions</div>
+                  {dashboard.decisions?.length > 0 ? (
+                    <div style={styles.decisionsList}>
+                      {dashboard.decisions.map((decision, i) => (
+                        <div key={i} style={styles.decisionItem}>
+                          <div style={styles.decisionNumber}>#{i + 1}</div>
+                          <div style={styles.decisionText}>{decision}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={styles.emptyMessage}>No decisions recorded yet</div>
+                  )}
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Open Questions</div>
+                  {dashboard.openQuestions?.length > 0 ? (
+                    <div style={styles.questionsList}>
+                      {dashboard.openQuestions.map((question, i) => (
+                        <div key={i} style={styles.questionItem}>
+                          <div style={styles.questionIcon}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
+                            </svg>
+                          </div>
+                          <div style={styles.questionText}>{question}</div>
+                          <div style={styles.questionBadge}>1 unanswered</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={styles.emptyMessage}>No open questions</div>
+                  )}
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Suggested Next Steps</div>
+                  <div style={styles.nextStepsList}>
+                    {dashboard.suggestedNextSteps ? (
+                      dashboard.suggestedNextSteps.split(',').map((step, i) => (
+                        <div key={i} style={styles.nextStepItem}>
+                          <div style={styles.nextStepIcon}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                              <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                          </div>
+                          <div style={styles.nextStepText}>{step.trim()}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={styles.emptyMessage}>Continue collaboration</div>
+                    )}
+                  </div>
+                  <div style={styles.updateTime}>Updated {getTimeAgo()}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div style={styles.dashboardRightCol}>
+              {/* Project Summary */}
+              <div style={styles.dashboardCard}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>Project Summary</h3>
+                  <div style={styles.updateBadge}>Last Updated {getTimeAgo()}</div>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Inferred Stage</div>
+                  <div style={styles.stageSelector}>
+                    {['ideation', 'design', 'discussion', 'blocked'].map((stage) => (
+                      <div 
+                        key={stage}
+                        style={{
+                          ...styles.stageOption,
+                          background: project.stage === stage ? getStageColor(stage) : 'transparent',
+                          border: project.stage === stage ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                          color: project.stage === stage ? '#fff' : '#8e8ea0'
+                        }}
+                      >
+                        {stage === 'ideation' && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                          </svg>
+                        )}
+                        {stage === 'design' && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                            <path d="M2 2l7.586 7.586"/>
+                            <circle cx="11" cy="11" r="2"/>
+                          </svg>
+                        )}
+                        {stage === 'discussion' && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                          </svg>
+                        )}
+                        {stage === 'blocked' && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                          </svg>
+                        )}
+                        {stage.charAt(0).toUpperCase() + stage.slice(1)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Activity</div>
+                  <div style={styles.activityChart}>
+                    <div style={styles.chartHeader}>
+                      <span style={styles.chartLabel}>Last 7 Days</span>
+                    </div>
+                    <div style={styles.chartBars}>
+                      {[12, 25, 18, 32, 28, 40, 35].map((value, i) => (
+                        <div key={i} style={styles.chartBarWrapper}>
+                          <div style={styles.chartBar}>
+                            <div style={{
+                              ...styles.chartBarFill,
+                              height: `${(value / 40) * 100}%`,
+                              background: i === 6 ? 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)' : 'rgba(102, 126, 234, 0.3)'
+                            }}></div>
+                          </div>
+                          <div style={styles.chartBarLabel}>
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Participants</div>
+                  <div style={styles.participantsList}>
+                    {project.members?.slice(0, 5).map((member, i) => {
+                      const username = member.userId?.username || 'Unknown';
+                      const timeAgo = ['5 mins ago', '10 mins ago', '25 mins ago', '1 hour ago', '2 hours ago'][i];
+                      return (
+                        <div key={i} style={styles.participantItem}>
+                          <div style={styles.participantAvatar}>
+                            {username.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={styles.participantInfo}>
+                            <div style={styles.participantName}>{username}</div>
+                            <div style={styles.participantTime}>{timeAgo}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {project.members?.length > 5 && (
+                      <button style={styles.viewAllBtn}>View All</button>
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.cardSection}>
+                  <div style={styles.sectionLabel}>Inferred Stage Progress</div>
+                  <div style={styles.progressBars}>
+                    <div style={styles.progressItem}>
+                      <div style={styles.progressLabel}>
+                        <span>Ideation</span>
+                        <span style={styles.progressPercent}>100%</span>
+                      </div>
+                      <div style={styles.progressBar}>
+                        <div style={{...styles.progressFill, width: '100%', background: '#10b981'}}></div>
+                      </div>
+                    </div>
+                    <div style={styles.progressItem}>
+                      <div style={styles.progressLabel}>
+                        <span>Design</span>
+                        <span style={styles.progressPercent}>65%</span>
+                      </div>
+                      <div style={styles.progressBar}>
+                        <div style={{...styles.progressFill, width: '65%', background: '#8b5cf6'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          <div style={styles.insightSection}>
-            <h3 style={styles.insightTitle}>Key Decisions</h3>
-            {dashboard.decisions?.length > 0 ? (
-              dashboard.decisions.map((decision, i) => (
-                <div key={i} style={styles.listItem}>• {decision}</div>
-              ))
-            ) : (
-              <p style={styles.emptyText}>No decisions recorded yet</p>
-            )}
-          </div>
-
-          <div style={styles.insightSection}>
-            <h3 style={styles.insightTitle}>Open Questions</h3>
-            {dashboard.openQuestions?.length > 0 ? (
-              dashboard.openQuestions.map((question, i) => (
-                <div key={i} style={styles.listItem}>• {question}</div>
-              ))
-            ) : (
-              <p style={styles.emptyText}>No open questions</p>
-            )}
-          </div>
-
-          {dashboard.suggestedNextSteps && (
-            <div style={styles.insightSection}>
-              <h3 style={styles.insightTitle}>Suggested Next Steps</h3>
-              <p style={styles.suggestionText}>{dashboard.suggestedNextSteps}</p>
-            </div>
-          )}
         </div>
       ) : (
-        <div style={styles.pageError}>Failed to load dashboard</div>
+        <div style={styles.dashboardError}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <p>Failed to load dashboard</p>
+          <button onClick={loadDashboard} style={styles.retryBtn}>Retry</button>
+        </div>
       )}
     </div>
   );
@@ -1068,7 +1465,8 @@ function Settings({ project, onClose, token, isOwner }) {
   const [copied, setCopied] = useState(false);
 
   const copyInviteCode = () => {
-    navigator.clipboard.writeText(project.inviteCode);
+    const inviteLink = `${window.location.origin}/join/${project.inviteCode}`;
+    navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -1097,10 +1495,10 @@ function Settings({ project, onClose, token, isOwner }) {
           </div>
 
           <div style={styles.settingSection}>
-            <h3 style={styles.sectionTitle}>Invite Code</h3>
-            <p style={styles.sectionDesc}>Share this code with team members</p>
+            <h3 style={styles.sectionTitle}>Invite Link</h3>
+            <p style={styles.sectionDesc}>Share this link with team members</p>
             <div style={styles.codeBox}>
-              <code style={styles.code}>{project.inviteCode}</code>
+              <code style={styles.code}>{`${window.location.origin}/join/${project.inviteCode}`}</code>
               <button onClick={copyInviteCode} style={styles.copyBtn}>
                 {copied ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1141,11 +1539,231 @@ function Settings({ project, onClose, token, isOwner }) {
   );
 }
 
+function Summaries({ project, discussion, onClose, token }) {
+  const [summaries, setSummaries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [editingSummary, setEditingSummary] = useState(null);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [regenerating, setRegenerating] = useState(false);
+
+  useEffect(() => {
+    loadSummaries();
+  }, []);
+
+  const loadSummaries = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/summaries`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      const data = await response.json();
+      if (data.success) {
+        // Filter summaries for current discussion
+        const discSummaries = data.summaries.filter(
+          s => s.discussionId === discussion._id
+        );
+        setSummaries(discSummaries);
+      }
+    } catch (error) {
+      console.error('Error loading summaries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSummary = async (prompt = null) => {
+    setGenerating(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summarize`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ customPrompt: prompt })
+        }
+      );
+      const data = await response.json();
+      if (data.success) {
+        loadSummaries();
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const regenerateSummary = async (summaryId) => {
+    if (!customPrompt.trim()) {
+      alert('Please enter refinement instructions');
+      return;
+    }
+
+    setRegenerating(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ customPrompt })
+        }
+      );
+      const data = await response.json();
+      if (data.success) {
+        setEditingSummary(null);
+        setCustomPrompt('');
+        loadSummaries();
+      }
+    } catch (error) {
+      console.error('Error regenerating summary:', error);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const deleteSummary = async (summaryId) => {
+    if (!confirm('Delete this summary?')) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      const data = await response.json();
+      if (data.success) {
+        loadSummaries();
+      }
+    } catch (error) {
+      console.error('Error deleting summary:', error);
+    }
+  };
+
+  return (
+    <div style={styles.fullPage}>
+      <div style={styles.pageHeader}>
+        <button onClick={onClose} style={styles.backButton}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back
+        </button>
+        <h1 style={styles.pageTitle}>Summaries - {discussion.title}</h1>
+        <button 
+          onClick={() => generateSummary()} 
+          style={styles.uploadButton}
+          disabled={generating}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          {generating ? 'Generating...' : 'Generate'}
+        </button>
+      </div>
+
+      <div style={styles.pageContent}>
+        {loading ? (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>Loading summaries...</p>
+          </div>
+        ) : summaries.length === 0 ? (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>No summaries yet</p>
+            <p style={styles.emptyHint}>Generate a summary to capture key points from this discussion</p>
+          </div>
+        ) : (
+          <div style={styles.summariesList}>
+            {summaries.map(summary => (
+              <div key={summary._id} style={styles.summaryCard}>
+                <div style={styles.summaryHeader}>
+                  <div style={styles.summaryMeta}>
+                    <span style={styles.summaryDate}>
+                      {new Date(summary.createdAt).toLocaleDateString()}
+                    </span>
+                    <span style={styles.summaryProvider}>
+                      via {summary.generatedBy}
+                    </span>
+                  </div>
+                  <div style={styles.summaryActions}>
+                    <button 
+                      onClick={() => setEditingSummary(summary._id)}
+                      style={styles.summaryActionBtn}
+                      title="Refine summary"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button 
+                      onClick={() => deleteSummary(summary._id)}
+                      style={{...styles.summaryActionBtn, color: '#ef4444'}}
+                      title="Delete summary"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                <div style={styles.summaryContent}>
+                  {summary.content}
+                </div>
+
+                {editingSummary === summary._id && (
+                  <div style={styles.refineBox}>
+                    <textarea
+                      value={customPrompt}
+                      onChange={(e) => setCustomPrompt(e.target.value)}
+                      placeholder="How would you like to refine this summary? (e.g., 'Make it more concise', 'Focus on technical decisions', 'Add action items')"
+                      style={styles.refineInput}
+                      rows={3}
+                    />
+                    <div style={styles.refineActions}>
+                      <button 
+                        onClick={() => {
+                          setEditingSummary(null);
+                          setCustomPrompt('');
+                        }}
+                        style={styles.refineCancelBtn}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={() => regenerateSummary(summary._id)}
+                        style={styles.refineSubmitBtn}
+                        disabled={regenerating || !customPrompt.trim()}
+                      >
+                        {regenerating ? 'Refining...' : 'Refine Summary'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const styles = {
   container: {
     display: 'flex',
     height: '100vh',
-    background: '#343541',
+    background: '#0d0d0d',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   iconBar: {
@@ -1154,14 +1772,14 @@ const styles = {
     top: 0,
     width: '48px',
     height: '100vh',
-    background: '#171717',
+    background: '#000000',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     padding: '8px 0',
     gap: '8px',
     zIndex: 200,
-    borderRight: '1px solid rgba(255,255,255,0.1)'
+    borderRight: '1px solid #2d2d2d'
   },
   iconBarBtn: {
     width: '40px',
@@ -1169,22 +1787,21 @@ const styles = {
     background: 'transparent',
     border: 'none',
     borderRadius: '8px',
-    color: '#8e8ea0',
+    color: '#6b6b6b',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'all 0.2s',
     '&:hover': {
-      background: 'rgba(255,255,255,0.1)',
-      color: '#ececf1'
+      background: 'rgba(255,255,255,0.05)',
+      color: '#ececec'
     }
   },
   iconBarUser: {
     width: '32px',
     height: '32px',
     borderRadius: '50%',
-    background: '#5436da',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1198,18 +1815,18 @@ const styles = {
     top: 0,
     width: '260px',
     height: '100vh',
-    background: '#202123',
+    background: '#171717',
     zIndex: 150,
     display: 'flex',
     flexDirection: 'column',
-    borderRight: '1px solid rgba(255,255,255,0.1)'
+    borderRight: '1px solid #2d2d2d'
   },
   sidebarHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: '1px solid #2d2d2d'
   },
   sidebarHeaderBtn: {
     display: 'flex',
@@ -1217,9 +1834,9 @@ const styles = {
     gap: '8px',
     padding: '8px 12px',
     background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: '1px solid #2d2d2d',
     borderRadius: '6px',
-    color: '#ececf1',
+    color: '#ececec',
     fontSize: '14px',
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -1228,7 +1845,7 @@ const styles = {
   closeSidebarBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#8e8ea0',
+    color: '#6b6b6b',
     cursor: 'pointer',
     padding: '4px',
     display: 'flex',
@@ -1248,7 +1865,7 @@ const styles = {
     padding: '10px 12px',
     borderRadius: '6px',
     cursor: 'pointer',
-    color: '#ececf1',
+    color: '#ececec',
     fontSize: '14px',
     marginBottom: '2px',
     transition: 'background 0.2s'
@@ -1260,7 +1877,7 @@ const styles = {
     whiteSpace: 'nowrap'
   },
   sidebarFooter: {
-    borderTop: '1px solid rgba(255,255,255,0.1)',
+    borderTop: '1px solid #2d2d2d',
     padding: '12px'
   },
   userSection: {
@@ -1275,7 +1892,7 @@ const styles = {
     width: '32px',
     height: '32px',
     borderRadius: '4px',
-    background: '#5436da',
+    background: '#8b5cf6',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1295,30 +1912,49 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
+  logoutBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px 12px',
+    marginTop: '8px',
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '6px',
+    color: '#ececf1',
+    fontSize: '14px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background 0.2s'
+  },
   main: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     transition: 'margin-left 0.2s',
-    position: 'relative'
+    position: 'relative',
+    background: '#0d0d0d'
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 16px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    borderBottom: '1px solid #2d2d2d',
     position: 'relative'
   },
   headerTitle: {
     flex: 1,
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    gap: '16px',
+    marginLeft: '16px'
   },
   title: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     margin: 0
   },
   headerActions: {
@@ -1329,7 +1965,7 @@ const styles = {
     border: 'none',
     borderRadius: '6px',
     padding: '8px',
-    color: '#fff',
+    color: '#ececec',
     cursor: 'pointer'
   },
   dropdown: {
@@ -1337,8 +1973,8 @@ const styles = {
     right: 0,
     top: '100%',
     marginTop: '8px',
-    background: '#202123',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
     borderRadius: '8px',
     minWidth: '180px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -1363,7 +1999,8 @@ const styles = {
     flex: 1,
     overflowY: 'auto',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    background: '#0d0d0d'
   },
   empty: {
     flex: 1,
@@ -1377,51 +2014,81 @@ const styles = {
   emptyTitle: {
     fontSize: '28px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     marginBottom: '8px'
   },
   emptyText: {
     fontSize: '16px',
-    color: '#8e8ea0'
+    color: '#b4b4b4',
+    marginBottom: '8px'
   },
-  messageRow: {
+  emptyHint: {
+    fontSize: '14px',
+    color: '#6b6b6b'
+  },
+  loadingState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    gap: '16px'
+  },
+  loadingSpinner: {
+    width: '40px',
+    height: '40px',
+    border: '3px solid #2d2d2d',
+    borderTop: '3px solid #8b5cf6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
+  loadingText: {
+    fontSize: '14px',
+    color: '#b4b4b4'
+  },
+  aiThinkingIndicator: {
     padding: '24px 0',
     borderBottom: '1px solid rgba(255,255,255,0.1)'
   },
-  messageContent: {
-    maxWidth: '48rem',
-    margin: '0 auto',
-    padding: '0 24px',
+  thinkingDots: {
     display: 'flex',
-    gap: '24px'
+    gap: '4px',
+    padding: '12px'
   },
-  avatar: {
-    flexShrink: 0,
-    paddingTop: '4px'
+  statusBanner: {
+    padding: '8px 16px',
+    background: '#f59e0b',
+    color: '#000',
+    textAlign: 'center',
+    fontSize: '13px',
+    fontWeight: '500'
   },
   aiAvatar: {
     width: '30px',
     height: '30px',
-    borderRadius: '2px',
-    background: '#10a37f',
+    borderRadius: '4px',
+    background: '#8b5cf6',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#fff'
-  },
-  messageBody: {
-    flex: 1,
-    minWidth: 0
-  },
-  messageName: {
+    color: '#fff',
     fontSize: '14px',
-    fontWeight: '600',
-    color: '#ececf1',
-    marginBottom: '8px'
+    fontWeight: '600'
+  },
+  messageUserAvatar: {
+    width: '30px',
+    height: '30px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600'
   },
   inputArea: {
     padding: '12px 0 24px',
-    background: '#343541',
+    background: '#0d0d0d',
     position: 'relative'
   },
   mentionBox: {
@@ -1476,7 +2143,7 @@ const styles = {
     width: '30px',
     height: '30px',
     borderRadius: '2px',
-    background: '#5436da',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1489,9 +2156,9 @@ const styles = {
     margin: '0 auto',
     padding: '0 24px',
     position: 'relative',
-    background: '#40414f',
+    background: '#1a1a1a',
     borderRadius: '12px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid #2d2d2d',
     display: 'flex',
     alignItems: 'flex-end',
     gap: '8px',
@@ -1502,7 +2169,7 @@ const styles = {
     border: 'none',
     borderRadius: '6px',
     padding: '8px',
-    color: '#8e8ea0',
+    color: '#6b6b6b',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -1514,11 +2181,11 @@ const styles = {
     bottom: '100%',
     left: 0,
     marginBottom: '8px',
-    background: '#202123',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
     borderRadius: '8px',
     minWidth: '200px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
     zIndex: 1000
   },
   attachMenuItem: {
@@ -1529,7 +2196,7 @@ const styles = {
     padding: '12px 16px',
     background: 'transparent',
     border: 'none',
-    color: '#ececf1',
+    color: '#ececec',
     fontSize: '14px',
     cursor: 'pointer',
     textAlign: 'left',
@@ -1541,7 +2208,7 @@ const styles = {
     background: 'transparent',
     border: 'none',
     outline: 'none',
-    color: '#ececf1',
+    color: '#ececec',
     fontSize: '16px',
     resize: 'none',
     maxHeight: '200px',
@@ -1553,7 +2220,7 @@ const styles = {
     border: 'none',
     borderRadius: '6px',
     padding: '8px',
-    color: '#ececf1',
+    color: '#8b5cf6',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -1567,7 +2234,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0,0,0,0.7)',
+    background: 'rgba(0,0,0,0.8)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1575,13 +2242,14 @@ const styles = {
     padding: '20px'
   },
   settingsModal: {
-    background: '#343541',
+    background: '#1a1a1a',
     borderRadius: '12px',
     maxWidth: '600px',
     width: '100%',
     maxHeight: '90vh',
     overflow: 'auto',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.3)'
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    border: '1px solid #2d2d2d'
   },
   settingsHeader: {
     display: 'flex',
@@ -1707,32 +2375,54 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0,0,0,0.7)',
+    background: 'rgba(0,0,0,0.8)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2000
   },
   modal: {
-    background: '#343541',
+    background: '#1a1a1a',
     borderRadius: '12px',
-    padding: '24px',
-    minWidth: '400px',
-    maxWidth: '90%'
+    minWidth: '500px',
+    maxWidth: '90%',
+    border: '1px solid #2d2d2d'
+  },
+  modalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '20px 24px',
+    borderBottom: '1px solid #2d2d2d'
   },
   modalTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#ececf1',
-    marginBottom: '16px'
+    color: '#ececec',
+    margin: 0
+  },
+  modalClose: {
+    background: 'transparent',
+    border: 'none',
+    color: '#6b6b6b',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '4px',
+    transition: 'all 0.2s'
+  },
+  modalBody: {
+    padding: '24px'
   },
   modalInput: {
     width: '100%',
     padding: '12px',
-    background: '#40414f',
-    border: '1px solid rgba(255,255,255,0.1)',
+    background: '#0d0d0d',
+    border: '1px solid #2d2d2d',
     borderRadius: '8px',
-    color: '#ececf1',
+    color: '#ececec',
     fontSize: '14px',
     outline: 'none',
     fontFamily: 'inherit',
@@ -1746,15 +2436,15 @@ const styles = {
   modalCancel: {
     padding: '10px 20px',
     background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: '1px solid #2d2d2d',
     borderRadius: '8px',
-    color: '#ececf1',
+    color: '#ececec',
     cursor: 'pointer',
     fontFamily: 'inherit'
   },
   modalSubmit: {
     padding: '10px 20px',
-    background: '#10a37f',
+    background: '#8b5cf6',
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -1765,7 +2455,7 @@ const styles = {
   fullPage: {
     width: '100vw',
     height: '100vh',
-    background: '#343541',
+    background: '#0d0d0d',
     overflowY: 'auto'
   },
   pageHeader: {
@@ -1773,8 +2463,8 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '16px 24px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
-    background: '#202123'
+    borderBottom: '1px solid #2d2d2d',
+    background: '#171717'
   },
   backButton: {
     display: 'flex',
@@ -1782,9 +2472,9 @@ const styles = {
     gap: '8px',
     padding: '8px 12px',
     background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: '1px solid #2d2d2d',
     borderRadius: '6px',
-    color: '#ececf1',
+    color: '#ececec',
     cursor: 'pointer',
     fontFamily: 'inherit',
     fontSize: '14px'
@@ -1793,15 +2483,15 @@ const styles = {
     flex: 1,
     fontSize: '24px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     margin: 0
   },
   refreshButton: {
     padding: '8px',
     background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: '1px solid #2d2d2d',
     borderRadius: '6px',
-    color: '#ececf1',
+    color: '#ececec',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center'
@@ -1811,7 +2501,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '8px 16px',
-    background: '#10a37f',
+    background: '#8b5cf6',
     border: 'none',
     borderRadius: '6px',
     color: '#fff',
@@ -1828,12 +2518,12 @@ const styles = {
   pageLoading: {
     padding: '40px',
     textAlign: 'center',
-    color: '#8e8ea0'
+    color: '#b4b4b4'
   },
   pageError: {
     padding: '40px',
     textAlign: 'center',
-    color: '#f87171'
+    color: '#ef4444'
   },
   statsGrid: {
     display: 'grid',
@@ -1842,33 +2532,33 @@ const styles = {
     marginBottom: '32px'
   },
   statCard: {
-    background: '#40414f',
+    background: '#1a1a1a',
     padding: '20px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.1)'
+    border: '1px solid #2d2d2d'
   },
   statLabel: {
     fontSize: '14px',
-    color: '#8e8ea0',
+    color: '#b4b4b4',
     marginBottom: '8px'
   },
   statValue: {
     fontSize: '32px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     textTransform: 'capitalize'
   },
   insightSection: {
-    background: '#40414f',
+    background: '#1a1a1a',
     padding: '20px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid #2d2d2d',
     marginBottom: '16px'
   },
   insightTitle: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     marginBottom: '12px'
   },
   topicsList: {
@@ -1878,15 +2568,16 @@ const styles = {
   },
   topicTag: {
     padding: '6px 12px',
-    background: '#202123',
+    background: '#0d0d0d',
     borderRadius: '16px',
     fontSize: '14px',
-    color: '#ececf1'
+    color: '#ececec',
+    border: '1px solid #2d2d2d'
   },
   listItem: {
     padding: '8px 0',
     fontSize: '14px',
-    color: '#ececf1',
+    color: '#ececec',
     lineHeight: '1.6'
   },
   suggestionText: {
@@ -1916,9 +2607,9 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '16px',
-    background: '#40414f',
+    background: '#1a1a1a',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.1)'
+    border: '1px solid #2d2d2d'
   },
   documentInfo: {
     flex: 1
@@ -1926,12 +2617,12 @@ const styles = {
   documentName: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#ececf1',
+    color: '#ececec',
     marginBottom: '4px'
   },
   documentMeta: {
     fontSize: '12px',
-    color: '#8e8ea0'
+    color: '#b4b4b4'
   },
   discussionsHeader: {
     display: 'flex',
@@ -1943,7 +2634,7 @@ const styles = {
   discussionsLabel: {
     fontSize: '12px',
     fontWeight: '600',
-    color: '#8e8ea0',
+    color: '#6b6b6b',
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
@@ -1978,6 +2669,147 @@ const styles = {
   inviteBtn: {
     padding: '8px 16px',
     background: '#10a37f',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: '13px',
+    fontWeight: '600'
+  },
+  inviteDesc: {
+    fontSize: '14px',
+    color: '#8e8ea0',
+    marginBottom: '16px',
+    lineHeight: '1.5'
+  },
+  linkBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    background: '#40414f',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    padding: '12px 16px',
+    marginBottom: '20px'
+  },
+  linkText: {
+    flex: 1,
+    fontSize: '13px',
+    color: '#10a37f',
+    fontFamily: 'monospace',
+    wordBreak: 'break-all'
+  },
+  copyLinkBtn: {
+    padding: '8px',
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px',
+    color: '#ececf1',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.2s'
+  },
+  divider: {
+    display: 'flex',
+    alignItems: 'center',
+    margin: '20px 0',
+    color: '#8e8ea0'
+  },
+  dividerText: {
+    padding: '0 12px',
+    fontSize: '12px',
+    fontWeight: '600'
+  },
+  emailSection: {
+    marginTop: '20px'
+  },
+  emailLabel: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#ececf1',
+    marginBottom: '8px'
+  },
+  emailInputGroup: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '8px'
+  },
+  emailInput: {
+    flex: 1,
+    padding: '10px 12px',
+    background: '#0d0d0d',
+    border: '1px solid #2d2d2d',
+    borderRadius: '8px',
+    color: '#ececec',
+    fontSize: '14px',
+    outline: 'none',
+    fontFamily: 'inherit'
+  },
+  sendEmailBtn: {
+    padding: '10px 20px',
+    background: '#8b5cf6',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: '14px',
+    fontWeight: '600',
+    whiteSpace: 'nowrap'
+  },
+  emailHint: {
+    fontSize: '12px',
+    color: '#b4b4b4',
+    margin: 0
+  },
+  tabs: {
+    display: 'flex',
+    borderBottom: '1px solid #2d2d2d',
+    marginBottom: '20px'
+  },
+  tab: {
+    flex: 1,
+    padding: '12px',
+    background: 'transparent',
+    border: 'none',
+    color: '#6b6b6b',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s'
+  },
+  tabContent: {
+    marginTop: '20px'
+  },
+  memberItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px',
+    borderRadius: '8px',
+    marginBottom: '8px',
+    background: '#0d0d0d',
+    border: '1px solid #2d2d2d'
+  },
+  memberAvatar: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    background: '#8b5cf6',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  addBtn: {
+    padding: '8px 16px',
+    background: '#8b5cf6',
     border: 'none',
     borderRadius: '6px',
     color: '#fff',
@@ -2054,5 +2886,590 @@ const styles = {
     fontSize: '12px',
     color: '#8e8ea0',
     marginLeft: 'auto'
+  },
+  summariesList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  summaryCard: {
+    background: '#40414f',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '12px',
+    padding: '20px',
+    transition: 'border-color 0.2s'
+  },
+  summaryHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)'
+  },
+  summaryMeta: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center'
+  },
+  summaryDate: {
+    fontSize: '13px',
+    color: '#8e8ea0',
+    fontWeight: '500'
+  },
+  summaryProvider: {
+    fontSize: '12px',
+    color: '#565869',
+    padding: '2px 8px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '4px'
+  },
+  summaryActions: {
+    display: 'flex',
+    gap: '8px'
+  },
+  summaryActionBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px',
+    padding: '6px',
+    color: '#ececf1',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.2s'
+  },
+  summaryContent: {
+    fontSize: '14px',
+    color: '#ececf1',
+    lineHeight: '1.6',
+    whiteSpace: 'pre-wrap'
+  },
+  refineBox: {
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: '1px solid rgba(255,255,255,0.1)'
+  },
+  refineInput: {
+    width: '100%',
+    padding: '12px',
+    background: '#343541',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    color: '#ececf1',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    resize: 'vertical',
+    outline: 'none',
+    marginBottom: '12px'
+  },
+  refineActions: {
+    display: 'flex',
+    gap: '8px',
+    justifyContent: 'flex-end'
+  },
+  refineCancelBtn: {
+    padding: '8px 16px',
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px',
+    color: '#ececf1',
+    fontSize: '14px',
+    cursor: 'pointer',
+    fontFamily: 'inherit'
+  },
+  refineSubmitBtn: {
+    padding: '8px 16px',
+    background: '#10a37f',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit'
+  },
+  // Dashboard Styles
+  dashboardPage: {
+    minHeight: '100vh',
+    background: '#1a1b26',
+    color: '#fff',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  },
+  dashboardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '24px 32px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    background: '#16171f'
+  },
+  dashboardHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px'
+  },
+  dashboardBackBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    color: '#ececf1',
+    fontSize: '14px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s'
+  },
+  dashboardTitle: {
+    fontSize: '28px',
+    fontWeight: '700',
+    margin: 0,
+    color: '#fff'
+  },
+  dashboardSubtitle: {
+    fontSize: '14px',
+    color: '#8e8ea0',
+    margin: '4px 0 0 0'
+  },
+  dashboardRefreshBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'transform 0.2s'
+  },
+  dashboardLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '400px',
+    gap: '16px'
+  },
+  dashboardContent: {
+    padding: '32px',
+    maxWidth: '1600px',
+    margin: '0 auto'
+  },
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '20px',
+    marginBottom: '32px'
+  },
+  statCardNew: {
+    padding: '24px',
+    borderRadius: '12px',
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
+    color: '#ececec',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  statIconBox: {
+    width: '48px',
+    height: '48px',
+    background: '#8b5cf6',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '16px',
+    color: '#fff'
+  },
+  statContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  statLabelNew: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#b4b4b4'
+  },
+  statValueNew: {
+    fontSize: '36px',
+    fontWeight: '700',
+    lineHeight: 1,
+    color: '#ececec'
+  },
+  dashboardGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1.5fr 1fr',
+    gap: '24px',
+    alignItems: 'start'
+  },
+  dashboardLeftCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px'
+  },
+  dashboardRightCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px'
+  },
+  dashboardCard: {
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
+    borderRadius: '12px',
+    padding: '24px'
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '24px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #2d2d2d'
+  },
+  cardTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    margin: 0,
+    color: '#ececec'
+  },
+  cardMenuBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#6b6b6b',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '4px',
+    transition: 'background 0.2s'
+  },
+  updateBadge: {
+    fontSize: '12px',
+    color: '#b4b4b4',
+    padding: '4px 12px',
+    background: '#0d0d0d',
+    borderRadius: '12px',
+    border: '1px solid #2d2d2d'
+  },
+  cardSection: {
+    marginBottom: '24px'
+  },
+  sectionLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#6b6b6b',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '12px'
+  },
+  topicsGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px'
+  },
+  topicBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 14px',
+    background: '#0d0d0d',
+    border: '1px solid #2d2d2d',
+    borderRadius: '20px',
+    fontSize: '13px',
+    color: '#ececec',
+    fontWeight: '500'
+  },
+  decisionsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  decisionItem: {
+    display: 'flex',
+    gap: '12px',
+    padding: '12px',
+    background: '#0d0d0d',
+    borderRadius: '8px',
+    border: '1px solid #2d2d2d'
+  },
+  decisionNumber: {
+    width: '28px',
+    height: '28px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: '700',
+    flexShrink: 0
+  },
+  decisionText: {
+    fontSize: '14px',
+    color: '#ececf1',
+    lineHeight: '1.5',
+    flex: 1
+  },
+  questionsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  questionItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+    padding: '12px',
+    background: 'rgba(255,255,255,0.03)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  questionIcon: {
+    width: '32px',
+    height: '32px',
+    background: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#f87171',
+    flexShrink: 0
+  },
+  questionText: {
+    fontSize: '14px',
+    color: '#ececf1',
+    lineHeight: '1.5',
+    flex: 1
+  },
+  questionBadge: {
+    fontSize: '11px',
+    color: '#8e8ea0',
+    padding: '2px 8px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '10px',
+    whiteSpace: 'nowrap'
+  },
+  nextStepsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  nextStepItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '10px',
+    background: 'rgba(16, 185, 129, 0.05)',
+    borderRadius: '8px',
+    border: '1px solid rgba(16, 185, 129, 0.2)'
+  },
+  nextStepIcon: {
+    width: '24px',
+    height: '24px',
+    background: 'rgba(16, 185, 129, 0.2)',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#10b981',
+    flexShrink: 0
+  },
+  nextStepText: {
+    fontSize: '14px',
+    color: '#ececf1',
+    lineHeight: '1.5'
+  },
+  updateTime: {
+    fontSize: '12px',
+    color: '#565869',
+    marginTop: '16px',
+    textAlign: 'right'
+  },
+  emptyMessage: {
+    fontSize: '14px',
+    color: '#565869',
+    padding: '20px',
+    textAlign: 'center',
+    fontStyle: 'italic'
+  },
+  stageSelector: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
+  },
+  stageOption: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  activityChart: {
+    padding: '16px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '12px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  chartHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px'
+  },
+  chartLabel: {
+    fontSize: '13px',
+    color: '#8e8ea0',
+    fontWeight: '500'
+  },
+  chartBars: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: '120px',
+    gap: '8px'
+  },
+  chartBarWrapper: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  chartBar: {
+    width: '100%',
+    height: '100px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '6px 6px 0 0',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  chartBarFill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderRadius: '6px 6px 0 0',
+    transition: 'height 0.3s ease'
+  },
+  chartBarLabel: {
+    fontSize: '11px',
+    color: '#565869',
+    fontWeight: '500'
+  },
+  participantsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  participantItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  participantAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '10px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff',
+    flexShrink: 0
+  },
+  participantInfo: {
+    flex: 1
+  },
+  participantName: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#ececf1',
+    marginBottom: '2px'
+  },
+  participantTime: {
+    fontSize: '12px',
+    color: '#565869'
+  },
+  viewAllBtn: {
+    width: '100%',
+    padding: '10px',
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    color: '#8e8ea0',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s'
+  },
+  progressBars: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  progressItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  progressLabel: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    color: '#ececf1',
+    fontWeight: '500'
+  },
+  progressPercent: {
+    color: '#8e8ea0'
+  },
+  progressBar: {
+    height: '8px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '4px',
+    overflow: 'hidden'
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: '4px',
+    transition: 'width 0.3s ease'
+  },
+  dashboardError: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '400px',
+    gap: '16px',
+    color: '#8e8ea0'
+  },
+  retryBtn: {
+    padding: '10px 24px',
+    background: '#667eea',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit'
   }
 };

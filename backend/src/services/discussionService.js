@@ -5,7 +5,13 @@ class DiscussionService {
   // Get project discussions
   async getProjectDiscussions(projectId) {
     try {
-      const discussions = await Discussion.find({ projectId })
+      const discussions = await Discussion.find({ 
+        projectId,
+        $or: [
+          { status: 'active' },
+          { status: { $exists: false } } // Support old discussions without status field
+        ]
+      })
         .populate('participants', 'username email')
         .sort({ isMain: -1, lastActivity: -1 })
         .lean();
@@ -13,17 +19,25 @@ class DiscussionService {
       return discussions;
     } catch (error) {
       console.error('Error getting discussions:', error);
-      return [];
+      throw error;
     }
   }
 
   // Create parallel discussion
-  async createDiscussion(projectId, title, description, creatorId, ownerId) {
+  async createDiscussion(projectId, title, description, creatorId, ownerId, parentDiscussionId = null) {
     try {
-      // Add both creator and owner (if different) as participants
       const participants = [creatorId];
       if (ownerId && ownerId.toString() !== creatorId.toString()) {
         participants.push(ownerId);
+      }
+
+      // Calculate branch depth
+      let branchDepth = 0;
+      if (parentDiscussionId) {
+        const parent = await Discussion.findById(parentDiscussionId);
+        if (parent) {
+          branchDepth = parent.branchDepth + 1;
+        }
       }
 
       const discussion = new Discussion({
@@ -31,13 +45,36 @@ class DiscussionService {
         title: title.trim(),
         description,
         isMain: false,
-        participants
+        participants,
+        creatorId,
+        parentDiscussionId,
+        branchDepth
       });
 
       await discussion.save();
       return discussion;
     } catch (error) {
       console.error('Error creating discussion:', error);
+      throw error;
+    }
+  }
+
+  // Get discussion graph
+  async getDiscussionGraph(projectId) {
+    try {
+      const discussions = await Discussion.find({ 
+        projectId,
+        $or: [
+          { status: 'active' },
+          { status: { $exists: false } }
+        ]
+      })
+        .select('_id title parentDiscussionId branchDepth messageCount lastActivity')
+        .lean();
+
+      return discussions;
+    } catch (error) {
+      console.error('Error getting discussion graph:', error);
       throw error;
     }
   }

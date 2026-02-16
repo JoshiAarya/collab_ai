@@ -33,10 +33,22 @@ export default function Auth() {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.logo}>
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <rect width="40" height="40" rx="8" fill="#10a37f"/>
-            <path d="M20 10L28 16V24L20 30L12 24V16L20 10Z" fill="white"/>
-          </svg>
+          <div style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            background: '#8b5cf6',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff'
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
         </div>
         
         <h1 style={styles.title}>
@@ -139,16 +151,17 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#343541',
+    background: '#0d0d0d',
     padding: '20px'
   },
   card: {
-    background: '#fff',
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
     borderRadius: '12px',
     padding: '48px 40px',
-    maxWidth: '400px',
+    maxWidth: '420px',
     width: '100%',
-    boxShadow: '0 2px 16px rgba(0,0,0,0.1)'
+    boxShadow: '0 4px 24px rgba(0,0,0,0.5)'
   },
   logo: {
     display: 'flex',
@@ -160,7 +173,7 @@ const styles = {
     fontWeight: '600',
     marginBottom: '32px',
     textAlign: 'center',
-    color: '#2d333a'
+    color: '#ececec'
   },
   form: {
     display: 'flex',
@@ -174,34 +187,34 @@ const styles = {
   input: {
     padding: '14px 16px',
     borderRadius: '8px',
-    border: '1px solid #c2c8d0',
-    background: '#fff',
-    color: '#2d333a',
-    fontSize: '16px',
+    border: '1px solid #2d2d2d',
+    background: '#0d0d0d',
+    color: '#ececec',
+    fontSize: '15px',
     outline: 'none',
-    transition: 'border-color 0.2s',
+    transition: 'all 0.2s',
     fontFamily: 'inherit'
   },
   button: {
     padding: '14px 16px',
     borderRadius: '8px',
     border: 'none',
-    background: '#10a37f',
+    background: '#8b5cf6',
     color: '#fff',
     fontSize: '16px',
     fontWeight: '600',
     cursor: 'pointer',
     marginTop: '8px',
-    transition: 'background 0.2s',
+    transition: 'all 0.2s',
     fontFamily: 'inherit'
   },
   error: {
     padding: '12px 16px',
     borderRadius: '8px',
-    background: '#fef2f2',
-    color: '#dc2626',
+    background: 'rgba(239, 68, 68, 0.1)',
+    color: '#f87171',
     fontSize: '14px',
-    border: '1px solid #fecaca'
+    border: '1px solid rgba(239, 68, 68, 0.2)'
   },
   divider: {
     position: 'relative',
@@ -214,43 +227,44 @@ const styles = {
       left: 0,
       right: 0,
       height: '1px',
-      background: '#e5e7eb'
+      background: '#2d2d2d'
     }
   },
   dividerText: {
     position: 'relative',
-    background: '#fff',
+    background: '#1a1a1a',
     padding: '0 12px',
-    color: '#6b7280',
-    fontSize: '14px',
+    color: '#6b6b6b',
+    fontSize: '13px',
     fontWeight: '500'
   },
   googleButton: {
     padding: '14px 16px',
     borderRadius: '8px',
-    border: '1px solid #c2c8d0',
-    background: '#fff',
-    color: '#2d333a',
-    fontSize: '16px',
+    border: '1px solid #2d2d2d',
+    background: 'transparent',
+    color: '#6b6b6b',
+    fontSize: '15px',
     fontWeight: '500',
     cursor: 'not-allowed',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '12px',
-    opacity: 0.6,
-    fontFamily: 'inherit'
+    opacity: 0.5,
+    fontFamily: 'inherit',
+    width: '100%'
   },
   footer: {
     textAlign: 'center',
     marginTop: '24px',
     fontSize: '14px',
-    color: '#6b7280'
+    color: '#6b6b6b'
   },
   link: {
     background: 'none',
     border: 'none',
-    color: '#10a37f',
+    color: '#a78bfa',
     fontWeight: '600',
     cursor: 'pointer',
     fontSize: '14px',

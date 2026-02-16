@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Auth from './components/Auth';
 import ProjectList from './components/ProjectList';
 import ProjectWorkspace from './components/ProjectWorkspace';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -34,9 +35,11 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -46,8 +49,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#0d1117',
-    color: '#fff',
+    background: '#0d0d0d',
+    color: '#ececec',
     fontSize: 18
   }
 };

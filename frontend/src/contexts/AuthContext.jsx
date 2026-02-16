@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import apiService from '../services/api.js';
+import config from '../config/index.js';
 
 const AuthContext = createContext(null);
 
@@ -19,6 +21,7 @@ export const AuthProvider = ({ children }) => {
     // Check for stored token
     const storedToken = localStorage.getItem('collab-ai-token');
     if (storedToken) {
+      apiService.setToken(storedToken);
       verifyToken(storedToken);
     } else {
       setLoading(false);
@@ -27,62 +30,53 @@ export const AuthProvider = ({ children }) => {
 
   const verifyToken = async (tokenToVerify) => {
     try {
-      const response = await fetch('http://localhost:8080/api/auth/verify', {
-        headers: {
-          'Authorization': `Bearer ${tokenToVerify}`
-        }
-      });
+      const data = await apiService.get(config.api.auth.verify);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (data.success) {
         setUser(data.user);
         setToken(tokenToVerify);
       } else {
         localStorage.removeItem('collab-ai-token');
+        apiService.clearToken();
       }
     } catch (error) {
       console.error('Token verification failed:', error);
       localStorage.removeItem('collab-ai-token');
+      apiService.clearToken();
     } finally {
       setLoading(false);
     }
   };
 
   const login = async (email, password) => {
-    const response = await fetch('http://localhost:8080/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await response.json();
+    const data = await apiService.post(config.api.auth.login, { email, password });
     
     if (!data.success) {
-      throw new Error(data.error);
+      throw new Error(data.error?.message || 'Login failed');
     }
 
     setUser(data.user);
     setToken(data.token);
+    apiService.setToken(data.token);
     localStorage.setItem('collab-ai-token', data.token);
     
     return data;
   };
 
   const register = async (username, email, password) => {
-    const response = await fetch('http://localhost:8080/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password })
+    const data = await apiService.post(config.api.auth.register, { 
+      username, 
+      email, 
+      password 
     });
-
-    const data = await response.json();
     
     if (!data.success) {
-      throw new Error(data.error);
+      throw new Error(data.error?.message || 'Registration failed');
     }
 
     setUser(data.user);
     setToken(data.token);
+    apiService.setToken(data.token);
     localStorage.setItem('collab-ai-token', data.token);
     
     return data;
@@ -91,6 +85,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
+    apiService.clearToken();
     localStorage.removeItem('collab-ai-token');
   };
 

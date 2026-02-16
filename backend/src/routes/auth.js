@@ -1,81 +1,59 @@
 import express from 'express';
 import authService from '../services/authService.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
+import { validate } from '../middleware/validation.js';
+import { AuthenticationError } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
 // Register
-router.post('/register', async (req, res) => {
-  try {
+router.post('/register', 
+  validate('register'),
+  asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username, email, and password required' 
-      });
-    }
-
     const result = await authService.register(username, email, password);
     res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
+  })
+);
 
 // Login
-router.post('/login', async (req, res) => {
-  try {
+router.post('/login',
+  validate('login'),
+  asyncHandler(async (req, res) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Email and password required' 
-      });
-    }
-
     const result = await authService.login(email, password);
     res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(401).json({ success: false, error: error.message });
-  }
-});
+  })
+);
 
 // Google OAuth (stubbed)
-router.post('/google', async (req, res) => {
-  try {
-    const { googleId, email, username } = req.body;
+router.post('/google', asyncHandler(async (req, res) => {
+  const { googleId, email, username } = req.body;
 
-    if (!googleId || !email) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Google ID and email required' 
-      });
-    }
-
-    const result = await authService.googleAuth(googleId, email, username);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
+  if (!googleId || !email) {
+    throw new ValidationError('Google ID and email required');
   }
-});
+
+  const result = await authService.googleAuth(googleId, email, username);
+  res.json({ success: true, ...result });
+}));
 
 // Verify token
-router.get('/verify', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+router.get('/verify', asyncHandler(async (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
 
-    if (!token) {
-      return res.status(401).json({ success: false, error: 'No token' });
-    }
-
-    const decoded = authService.verifyToken(token);
-    const user = await authService.getUserById(decoded.userId);
-
-    res.json({ success: true, user });
-  } catch (error) {
-    res.status(401).json({ success: false, error: 'Invalid token' });
+  if (!token) {
+    throw new AuthenticationError('No token provided');
   }
-});
+
+  const decoded = authService.verifyToken(token);
+  const user = await authService.getUserById(decoded.userId);
+
+  if (!user) {
+    throw new AuthenticationError('User not found');
+  }
+
+  res.json({ success: true, user });
+}));
 
 export default router;

@@ -12,10 +12,10 @@ class DocumentService {
         uploadedBy
       });
 
-      // For MVP: skip embeddings or use simple mock
-      // In production: generate embeddings here
-
       await document.save();
+      
+      // TODO: Generate embeddings via VectorStore for semantic search
+      
       return document;
     } catch (error) {
       console.error('Error uploading document:', error);
