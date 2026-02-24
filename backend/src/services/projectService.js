@@ -96,8 +96,15 @@ class ProjectService {
       );
 
       if (isMember) {
-        return project;
+        console.log(`User ${userId} already a member of project ${project._id}, skipping add`);
+        // Return populated project
+        return await Project.findById(project._id)
+          .populate('ownerId', 'username email')
+          .populate('members.userId', 'username email')
+          .lean();
       }
+
+      console.log(`Adding user ${userId} to project ${project._id}`);
 
       // Add member
       project.members.push({
@@ -118,7 +125,13 @@ class ProjectService {
         { $addToSet: { participants: userId } }
       );
 
-      return project;
+      console.log(`User ${userId} successfully added to project ${project._id}`);
+
+      // Return populated project
+      return await Project.findById(project._id)
+        .populate('ownerId', 'username email')
+        .populate('members.userId', 'username email')
+        .lean();
     } catch (error) {
       console.error('Error joining project:', error);
       throw error;

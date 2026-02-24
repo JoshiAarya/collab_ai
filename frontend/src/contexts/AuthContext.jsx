@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
 
   useEffect(() => {
     // Check for stored token
@@ -25,6 +26,7 @@ export const AuthProvider = ({ children }) => {
       verifyToken(storedToken);
     } else {
       setLoading(false);
+      setInitialCheckDone(true);
     }
   }, []);
 
@@ -45,6 +47,7 @@ export const AuthProvider = ({ children }) => {
       apiService.clearToken();
     } finally {
       setLoading(false);
+      setInitialCheckDone(true);
     }
   };
 
@@ -89,8 +92,18 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('collab-ai-token');
   };
 
+  // Expose method to manually trigger token verification (for OAuth)
+  const refreshAuth = async () => {
+    const storedToken = localStorage.getItem('collab-ai-token');
+    if (storedToken) {
+      setLoading(true);
+      apiService.setToken(storedToken);
+      await verifyToken(storedToken);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   );

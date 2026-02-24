@@ -44,6 +44,18 @@ export default function ProjectWorkspace({ project, onBack }) {
     loadDiscussions();
   }, [project]);
 
+  // Check for pending discussion ID from invite link
+  useEffect(() => {
+    const pendingDiscussionId = sessionStorage.getItem('pendingDiscussionId');
+    if (pendingDiscussionId && discussions.length > 0) {
+      const discussion = discussions.find(d => d._id === pendingDiscussionId);
+      if (discussion) {
+        setCurrentDiscussion(discussion);
+        sessionStorage.removeItem('pendingDiscussionId');
+      }
+    }
+  }, [discussions]);
+
   useEffect(() => {
     connectWebSocket();
     return () => {
@@ -142,6 +154,10 @@ export default function ProjectWorkspace({ project, onBack }) {
         if (data.message.isAI) {
           setAiThinking(false);
         }
+      } else if (data.type === 'ai-error') {
+        // Stop AI thinking state on error
+        setAiThinking(false);
+        setIsSendingMessage(false);
       } else if (data.type === 'error') {
         setIsSendingMessage(false);
         setAiThinking(false);
@@ -551,9 +567,9 @@ export default function ProjectWorkspace({ project, onBack }) {
                                   'Authorization': `Bearer ${token}`
                                 },
                                 body: JSON.stringify({
-                                  name: file.name,
+                                  title: file.name,
                                   content: event.target.result,
-                                  type: file.type || 'text/plain'
+                                  fileType: file.type || 'text/plain'
                                 })
                               }
                             );
@@ -834,11 +850,32 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 
     setSendingEmail(true);
     try {
-      alert(`Invite link to send to ${emailInput}:\n\n${inviteLink}\n\n(Email service will be integrated soon)`);
-      setEmailInput('');
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/discussions/${discussionId}/invite-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ 
+            email: emailInput.trim(),
+            discussionTitle: discussion?.title || 'Discussion'
+          })
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`Invitation sent to ${emailInput}!`);
+        setEmailInput('');
+      } else {
+        alert(data.error || 'Failed to send invitation');
+      }
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Failed to send email');
+      alert('Failed to send invitation. Please try again.');
     } finally {
       setSendingEmail(false);
     }
@@ -981,7 +1018,6 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 function Dashboard({ project, onClose, token }) {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
     loadDashboard();
@@ -997,22 +1033,12 @@ function Dashboard({ project, onClose, token }) {
       const data = await response.json();
       if (data.success) {
         setDashboard(data.dashboard);
-        setLastUpdated(new Date());
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const getTimeAgo = () => {
-    const seconds = Math.floor((new Date() - lastUpdated) / 1000);
-    if (seconds < 60) return `${seconds} secs ago`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} mins ago`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours} hours ago`;
   };
 
   const getStageColor = (stage) => {
@@ -1025,6 +1051,53 @@ function Dashboard({ project, onClose, token }) {
     };
     return colors[stage] || '#6b7280';
   };
+
+  const getSeverityColor = (severity) => {
+    const colors = {
+      'high': '#ef4444',
+      'medium': '#f59e0b',
+      'low': '#6b7280'
+    };
+    return colors[severity] || '#6b7280';
+  };
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Calculate momentum (messages per discussion)
+  const momentum = dashboard ? Math.round(dashboard.totalMessages / Math.max(dashboard.activeDiscussions, 1)) : 0;
+
+  // Filter valid blockers (remove garbage entries)
+  const getValidBlockers = (blockers) => {
+    if (!blockers || !Array.isArray(blockers)) return [];
+    return blockers.filter(b => {
+      const text = b.text || b;
+      if (!text || typeof text !== 'string') return false;
+      const normalized = text.toLowerCase().trim();
+      return !(
+        normalized === 'none' || 
+        normalized === 'none mentioned' || 
+        normalized === 'no blockers' ||
+        normalized === 'n/a' ||
+        normalized.startsWith('no ') ||
+        normalized.length < 5
+      );
+    });
+  };
+
+  const validBlockers = dashboard ? getValidBlockers(dashboard.openQuestions) : [];
+
+  // Calculate topic distribution
+  const topicData = dashboard?.topics ? 
+    (Array.isArray(dashboard.topics[0]) ? dashboard.topics : dashboard.topics.map(t => ({ name: t, count: 1 })))
+    : [];
+  const sortedTopics = topicData.sort((a, b) => (b.count || 0) - (a.count || 0));
+  const topTopics = sortedTopics.slice(0, 5);
+  const remainingTopics = sortedTopics.length - 5;
+  const maxCount = Math.max(...topTopics.map(t => t.count || 1), 1);
 
   return (
     <div style={styles.dashboardPage}>
@@ -1043,7 +1116,7 @@ function Dashboard({ project, onClose, token }) {
           </div>
         </div>
         <button onClick={loadDashboard} style={styles.dashboardRefreshBtn} disabled={loading}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
           </svg>
           Refresh
@@ -1057,273 +1130,236 @@ function Dashboard({ project, onClose, token }) {
         </div>
       ) : dashboard ? (
         <div style={styles.dashboardContent}>
-          {/* Stats Cards */}
-          <div style={styles.statsRow}>
-            <div style={styles.statCardNew}>
-              <div style={styles.statIconBox}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-              </div>
-              <div style={styles.statContent}>
-                <div style={styles.statLabelNew}>Total Messages</div>
-                <div style={styles.statValueNew}>{dashboard.totalMessages}</div>
+          {/* Project Health Bar */}
+          <div style={styles.healthBar}>
+            <div style={styles.healthCell}>
+              <div style={styles.healthLabel}>Stage</div>
+              <div style={{...styles.healthValue, color: getStageColor(project.stage)}}>
+                {project.stage.charAt(0).toUpperCase() + project.stage.slice(1)}
               </div>
             </div>
-
-            <div style={styles.statCardNew}>
-              <div style={styles.statIconBox}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-              </div>
-              <div style={styles.statContent}>
-                <div style={styles.statLabelNew}>Active Discussions</div>
-                <div style={styles.statValueNew}>{dashboard.activeDiscussions}</div>
+            <div style={styles.healthCell}>
+              <div style={styles.healthLabel}>Momentum</div>
+              <div style={styles.healthValue}>{momentum} msg/disc</div>
+            </div>
+            <div style={{
+              ...styles.healthCell,
+              background: validBlockers.length > 0 ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
+            }}>
+              <div style={styles.healthLabel}>Open Blockers</div>
+              <div style={{
+                ...styles.healthValue,
+                color: validBlockers.length > 0 ? '#ef4444' : '#10b981'
+              }}>
+                {validBlockers.length}
               </div>
             </div>
-
-            <div style={styles.statCardNew}>
-              <div style={styles.statIconBox}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
-                </svg>
-              </div>
-              <div style={styles.statContent}>
-                <div style={styles.statLabelNew}>Documents</div>
-                <div style={styles.statValueNew}>{dashboard.documentCount}</div>
-              </div>
+            <div style={styles.healthCell}>
+              <div style={styles.healthLabel}>Action Items</div>
+              <div style={styles.healthValue}>{dashboard.actionItems?.length || 0}</div>
+            </div>
+            <div style={styles.healthCell}>
+              <div style={styles.healthLabel}>Active Discussions</div>
+              <div style={styles.healthValue}>{dashboard.activeDiscussions}</div>
             </div>
           </div>
 
-          {/* Main Grid */}
+          {/* Two Column Layout */}
           <div style={styles.dashboardGrid}>
-            {/* Left Column */}
+            {/* Left Column - Intelligence */}
             <div style={styles.dashboardLeftCol}>
-              {/* Topics & Insights */}
+              {/* Topic Distribution */}
               <div style={styles.dashboardCard}>
-                <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>Topics & Insights</h3>
-                  <button style={styles.cardMenuBtn}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
-                    </svg>
-                  </button>
-                </div>
+                <h3 style={styles.cardTitleNew}>Topic Distribution</h3>
+                {topTopics.length > 0 ? (
+                  <div style={styles.topicBars}>
+                    {topTopics.map((topic, i) => (
+                      <div key={i} style={styles.topicBarRow}>
+                        <div style={styles.topicName}>{topic.name || topic}</div>
+                        <div style={styles.topicBarContainer}>
+                          <div style={{
+                            ...styles.topicBarFill,
+                            width: `${((topic.count || 1) / maxCount) * 100}%`
+                          }}></div>
+                        </div>
+                        <div style={styles.topicCount}>{topic.count || 1}</div>
+                      </div>
+                    ))}
+                    {remainingTopics > 0 && (
+                      <div style={styles.topicMore}>+{remainingTopics} more topics</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No topics identified yet</div>
+                )}
+              </div>
 
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Current Topics</div>
-                  <div style={styles.topicsGrid}>
-                    {dashboard.topics?.length > 0 ? (
-                      dashboard.topics.map((topic, i) => (
-                        <div key={i} style={styles.topicBadge}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink: 0}}>
-                            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+              {/* Key Decisions */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Key Decisions</h3>
+                {dashboard.decisions?.length > 0 ? (
+                  <div style={styles.timelineList}>
+                    {dashboard.decisions.slice(0, 5).map((decision, i) => (
+                      <div key={i} style={styles.timelineItem}>
+                        <div style={styles.timelineDot}></div>
+                        <div style={styles.timelineContent}>
+                          <div style={styles.timelineText}>{decision.text || decision}</div>
+                          <div style={styles.timelineMeta}>
+                            {decision.timestamp && formatTimestamp(decision.timestamp)}
+                            {decision.discussionId && ' • Main Discussion'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No decisions recorded yet</div>
+                )}
+              </div>
+
+              {/* Blockers */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Blockers</h3>
+                {validBlockers.length > 0 ? (
+                  <div style={styles.blockersList}>
+                    {['high', 'medium', 'low'].map(severity => {
+                      const items = validBlockers.filter(b => 
+                        (b.severity || 'medium') === severity
+                      );
+                      return items.map((blocker, i) => (
+                        <div key={`${severity}-${i}`} style={styles.blockerItem}>
+                          <div style={{
+                            ...styles.severityDot,
+                            background: getSeverityColor(severity)
+                          }}></div>
+                          <div style={styles.blockerText}>{blocker.text || blocker}</div>
+                        </div>
+                      ));
+                    })}
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No blockers</div>
+                )}
+              </div>
+
+              {/* Action Items */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Action Items</h3>
+                {dashboard.actionItems?.length > 0 ? (
+                  <div style={styles.actionList}>
+                    {dashboard.actionItems.slice(0, 5).map((action, i) => (
+                      <div key={i} style={styles.actionItem}>
+                        <div style={styles.actionCheckbox}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            {action.status === 'completed' && <polyline points="20 6 9 17 4 12"/>}
                           </svg>
-                          {topic}
                         </div>
-                      ))
-                    ) : (
-                      <div style={styles.emptyMessage}>No topics identified yet</div>
-                    )}
+                        <div style={styles.actionText}>{action.text || action}</div>
+                        <div style={{
+                          ...styles.statusBadge,
+                          background: action.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' :
+                                     action.status === 'in-progress' ? 'rgba(59, 130, 246, 0.1)' :
+                                     'rgba(107, 114, 128, 0.1)',
+                          color: action.status === 'completed' ? '#10b981' :
+                                 action.status === 'in-progress' ? '#3b82f6' :
+                                 '#6b7280'
+                        }}>
+                          {action.status || 'open'}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Key Decisions</div>
-                  {dashboard.decisions?.length > 0 ? (
-                    <div style={styles.decisionsList}>
-                      {dashboard.decisions.map((decision, i) => (
-                        <div key={i} style={styles.decisionItem}>
-                          <div style={styles.decisionNumber}>#{i + 1}</div>
-                          <div style={styles.decisionText}>{decision}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={styles.emptyMessage}>No decisions recorded yet</div>
-                  )}
-                </div>
-
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Open Questions</div>
-                  {dashboard.openQuestions?.length > 0 ? (
-                    <div style={styles.questionsList}>
-                      {dashboard.openQuestions.map((question, i) => (
-                        <div key={i} style={styles.questionItem}>
-                          <div style={styles.questionIcon}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="12" cy="12" r="10"/>
-                              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
-                            </svg>
-                          </div>
-                          <div style={styles.questionText}>{question}</div>
-                          <div style={styles.questionBadge}>1 unanswered</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={styles.emptyMessage}>No open questions</div>
-                  )}
-                </div>
-
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Suggested Next Steps</div>
-                  <div style={styles.nextStepsList}>
-                    {dashboard.suggestedNextSteps ? (
-                      dashboard.suggestedNextSteps.split(',').map((step, i) => (
-                        <div key={i} style={styles.nextStepItem}>
-                          <div style={styles.nextStepIcon}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                              <polyline points="22 4 12 14.01 9 11.01"/>
-                            </svg>
-                          </div>
-                          <div style={styles.nextStepText}>{step.trim()}</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div style={styles.emptyMessage}>Continue collaboration</div>
-                    )}
-                  </div>
-                  <div style={styles.updateTime}>Updated {getTimeAgo()}</div>
-                </div>
+                ) : (
+                  <div style={styles.emptyState}>No action items</div>
+                )}
               </div>
             </div>
 
-            {/* Right Column */}
+            {/* Right Column - Project State */}
             <div style={styles.dashboardRightCol}>
-              {/* Project Summary */}
+              {/* Stage Panel */}
               <div style={styles.dashboardCard}>
-                <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>Project Summary</h3>
-                  <div style={styles.updateBadge}>Last Updated {getTimeAgo()}</div>
+                <h3 style={styles.cardTitleNew}>Current Stage</h3>
+                <div style={styles.stageDisplay}>
+                  <div style={{
+                    ...styles.stageBadge,
+                    background: getStageColor(project.stage)
+                  }}>
+                    {project.stage.charAt(0).toUpperCase() + project.stage.slice(1)}
+                  </div>
+                  {dashboard.lastUpdated && (
+                    <div style={styles.stageUpdated}>
+                      Last updated {formatTimestamp(dashboard.lastUpdated)}
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Inferred Stage</div>
-                  <div style={styles.stageSelector}>
-                    {['ideation', 'design', 'discussion', 'blocked'].map((stage) => (
-                      <div 
-                        key={stage}
-                        style={{
-                          ...styles.stageOption,
-                          background: project.stage === stage ? getStageColor(stage) : 'transparent',
-                          border: project.stage === stage ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                          color: project.stage === stage ? '#fff' : '#8e8ea0'
-                        }}
-                      >
-                        {stage === 'ideation' && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="5"/>
-                            <line x1="12" y1="1" x2="12" y2="3"/>
-                            <line x1="12" y1="21" x2="12" y2="23"/>
-                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                            <line x1="1" y1="12" x2="3" y2="12"/>
-                            <line x1="21" y1="12" x2="23" y2="12"/>
-                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                          </svg>
-                        )}
-                        {stage === 'design' && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                            <path d="M2 2l7.586 7.586"/>
-                            <circle cx="11" cy="11" r="2"/>
-                          </svg>
-                        )}
-                        {stage === 'discussion' && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                          </svg>
-                        )}
-                        {stage === 'blocked' && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                          </svg>
-                        )}
-                        {stage.charAt(0).toUpperCase() + stage.slice(1)}
+              {/* Activity Graph */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Activity</h3>
+                <div style={styles.activityChartCompact}>
+                  <div style={styles.chartBarsCompact}>
+                    {[12, 25, 18, 32, 28, 40, 35].map((value, i) => (
+                      <div key={i} style={styles.chartBarWrapperCompact}>
+                        <div style={styles.chartBarCompact}>
+                          <div style={{
+                            ...styles.chartBarFillCompact,
+                            height: `${(value / 40) * 100}%`,
+                            background: i === 6 ? '#667eea' : 'rgba(102, 126, 234, 0.3)'
+                          }}></div>
+                        </div>
+                        <div style={styles.chartBarLabelCompact}>
+                          {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
+              </div>
 
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Activity</div>
-                  <div style={styles.activityChart}>
-                    <div style={styles.chartHeader}>
-                      <span style={styles.chartLabel}>Last 7 Days</span>
-                    </div>
-                    <div style={styles.chartBars}>
-                      {[12, 25, 18, 32, 28, 40, 35].map((value, i) => (
-                        <div key={i} style={styles.chartBarWrapper}>
-                          <div style={styles.chartBar}>
-                            <div style={{
-                              ...styles.chartBarFill,
-                              height: `${(value / 40) * 100}%`,
-                              background: i === 6 ? 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)' : 'rgba(102, 126, 234, 0.3)'
-                            }}></div>
-                          </div>
-                          <div style={styles.chartBarLabel}>
-                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
-                          </div>
+              {/* Participants */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Participants</h3>
+                <div style={styles.participantsListCompact}>
+                  {project.members?.slice(0, 5).map((member, i) => {
+                    const username = member.userId?.username || 'Unknown';
+                    const timeAgo = ['5m ago', '10m ago', '25m ago', '1h ago', '2h ago'][i];
+                    return (
+                      <div key={i} style={styles.participantItemCompact}>
+                        <div style={styles.participantAvatarCompact}>
+                          {username.charAt(0).toUpperCase()}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Participants</div>
-                  <div style={styles.participantsList}>
-                    {project.members?.slice(0, 5).map((member, i) => {
-                      const username = member.userId?.username || 'Unknown';
-                      const timeAgo = ['5 mins ago', '10 mins ago', '25 mins ago', '1 hour ago', '2 hours ago'][i];
-                      return (
-                        <div key={i} style={styles.participantItem}>
-                          <div style={styles.participantAvatar}>
-                            {username.charAt(0).toUpperCase()}
-                          </div>
-                          <div style={styles.participantInfo}>
-                            <div style={styles.participantName}>{username}</div>
-                            <div style={styles.participantTime}>{timeAgo}</div>
-                          </div>
+                        <div style={styles.participantInfoCompact}>
+                          <div style={styles.participantNameCompact}>{username}</div>
+                          <div style={styles.participantTimeCompact}>{timeAgo}</div>
                         </div>
-                      );
-                    })}
-                    {project.members?.length > 5 && (
-                      <button style={styles.viewAllBtn}>View All</button>
-                    )}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
 
-                <div style={styles.cardSection}>
-                  <div style={styles.sectionLabel}>Inferred Stage Progress</div>
-                  <div style={styles.progressBars}>
-                    <div style={styles.progressItem}>
-                      <div style={styles.progressLabel}>
-                        <span>Ideation</span>
-                        <span style={styles.progressPercent}>100%</span>
-                      </div>
-                      <div style={styles.progressBar}>
-                        <div style={{...styles.progressFill, width: '100%', background: '#10b981'}}></div>
-                      </div>
-                    </div>
-                    <div style={styles.progressItem}>
-                      <div style={styles.progressLabel}>
-                        <span>Design</span>
-                        <span style={styles.progressPercent}>65%</span>
-                      </div>
-                      <div style={styles.progressBar}>
-                        <div style={{...styles.progressFill, width: '65%', background: '#8b5cf6'}}></div>
-                      </div>
-                    </div>
+              {/* Stats Summary */}
+              <div style={styles.dashboardCard}>
+                <h3 style={styles.cardTitleNew}>Summary</h3>
+                <div style={styles.statsSummary}>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Total Messages</span>
+                    <span style={styles.summaryValue}>{dashboard.totalMessages}</span>
+                  </div>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Documents</span>
+                    <span style={styles.summaryValue}>{dashboard.documentCount}</span>
+                  </div>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Data Source</span>
+                    <span style={{
+                      ...styles.summaryValue,
+                      color: dashboard.source === 'persistent' ? '#10b981' : '#f59e0b'
+                    }}>
+                      {dashboard.source === 'persistent' ? 'Cached' : 'Live'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1372,6 +1408,14 @@ function Documents({ project, onClose, token }) {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Check for duplicate
+    const isDuplicate = documents.some(doc => doc.title === file.name);
+    if (isDuplicate) {
+      alert(`A document named "${file.name}" already exists. Please rename the file or delete the existing document first.`);
+      e.target.value = ''; // Reset file input
+      return;
+    }
+
     setUploading(true);
     const reader = new FileReader();
     
@@ -1386,9 +1430,9 @@ function Documents({ project, onClose, token }) {
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              name: file.name,
+              title: file.name,
               content: event.target.result,
-              type: file.type || 'text/plain'
+              fileType: file.type || 'text/plain'
             })
           }
         );
@@ -1396,11 +1440,15 @@ function Documents({ project, onClose, token }) {
         const data = await response.json();
         if (data.success) {
           loadDocuments();
+        } else {
+          alert(`Upload failed: ${data.error}`);
         }
       } catch (error) {
         console.error('Error uploading document:', error);
+        alert('Failed to upload document. Please try again.');
       } finally {
         setUploading(false);
+        e.target.value = ''; // Reset file input
       }
     };
 
@@ -1441,19 +1489,32 @@ function Documents({ project, onClose, token }) {
           </div>
         ) : (
           <div style={styles.documentsList}>
-            {documents.map(doc => (
-              <div key={doc._id} style={styles.documentCard}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
-                </svg>
-                <div style={styles.documentInfo}>
-                  <div style={styles.documentName}>{doc.name}</div>
-                  <div style={styles.documentMeta}>
-                    Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+            {documents.map(doc => {
+              const contentSize = doc.content ? (doc.content.length / 1024).toFixed(1) : '0';
+              const hasEmbeddings = doc.chunks && doc.chunks.length > 0;
+              
+              return (
+                <div key={doc._id} style={styles.documentCard}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+                  </svg>
+                  <div style={styles.documentInfo}>
+                    <div style={styles.documentName}>{doc.title}</div>
+                    <div style={styles.documentMeta}>
+                      {contentSize} KB • Uploaded {new Date(doc.createdAt).toLocaleDateString()}
+                    </div>
+                    <div style={{
+                      ...styles.documentMeta,
+                      color: hasEmbeddings ? '#10b981' : '#f59e0b',
+                      fontSize: '11px',
+                      marginTop: '4px'
+                    }}>
+                      {hasEmbeddings ? '✓ Embeddings ready' : '⏳ Processing embeddings...'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -1463,12 +1524,50 @@ function Documents({ project, onClose, token }) {
 
 function Settings({ project, onClose, token, isOwner }) {
   const [copied, setCopied] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const copyInviteCode = () => {
     const inviteLink = `${window.location.origin}/join/${project.inviteCode}`;
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSendInviteEmail = async () => {
+    if (!emailInput.trim()) {
+      alert('Please enter an email address');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${project._id}/invite-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ email: emailInput.trim() })
+        }
+      );
+
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`Invitation sent to ${emailInput}!`);
+        setEmailInput('');
+      } else {
+        alert(data.error || 'Failed to send invitation');
+      }
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('Failed to send invitation. Please try again.');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const members = project.members || [];
@@ -1510,6 +1609,49 @@ function Settings({ project, onClose, token, isOwner }) {
                   </svg>
                 )}
               </button>
+            </div>
+            
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #2d2d2d' }}>
+              <p style={{ fontSize: '14px', color: '#b4b4b4', marginBottom: '12px' }}>
+                Or send invitation via email:
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="email"
+                  placeholder="teammate@example.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    background: '#0d0d0d',
+                    border: '1px solid #2d2d2d',
+                    borderRadius: '6px',
+                    color: '#ececec',
+                    fontSize: '14px',
+                    outline: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                />
+                <button
+                  onClick={handleSendInviteEmail}
+                  disabled={sendingEmail || !emailInput.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#8b5cf6',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: sendingEmail || !emailInput.trim() ? 'not-allowed' : 'pointer',
+                    opacity: sendingEmail || !emailInput.trim() ? 0.5 : 1,
+                    fontFamily: 'inherit'
+                  }}
+                >
+                  {sendingEmail ? 'Sending...' : 'Send'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3106,7 +3248,7 @@ const styles = {
   },
   dashboardGrid: {
     display: 'grid',
-    gridTemplateColumns: '1.5fr 1fr',
+    gridTemplateColumns: '65fr 35fr',
     gap: '24px',
     alignItems: 'start'
   },
@@ -3471,5 +3613,312 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     fontFamily: 'inherit'
+  },
+  // New Dashboard Redesign Styles
+  healthBar: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
+    gap: '1px',
+    background: '#2d2d2d',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    marginBottom: '32px',
+    border: '1px solid #2d2d2d'
+  },
+  healthCell: {
+    padding: '16px 20px',
+    background: '#1a1a1a',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    transition: 'background 0.2s'
+  },
+  healthLabel: {
+    fontSize: '11px',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    fontWeight: '600'
+  },
+  healthValue: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#ececec'
+  },
+  cardTitleNew: {
+    fontSize: '15px',
+    fontWeight: '600',
+    margin: '0 0 20px 0',
+    color: '#ececec',
+    letterSpacing: '-0.01em'
+  },
+  topicBars: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px'
+  },
+  topicBarRow: {
+    display: 'grid',
+    gridTemplateColumns: '140px 1fr 40px',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  topicName: {
+    fontSize: '13px',
+    color: '#ececec',
+    fontWeight: '500',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  topicBarContainer: {
+    height: '8px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '4px',
+    overflow: 'hidden'
+  },
+  topicBarFill: {
+    height: '100%',
+    background: '#667eea',
+    borderRadius: '4px',
+    transition: 'width 0.3s ease'
+  },
+  topicCount: {
+    fontSize: '13px',
+    color: '#8e8ea0',
+    fontWeight: '600',
+    textAlign: 'right'
+  },
+  topicMore: {
+    fontSize: '12px',
+    color: '#6b7280',
+    marginTop: '4px',
+    fontStyle: 'italic'
+  },
+  timelineList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  timelineItem: {
+    display: 'flex',
+    gap: '12px',
+    position: 'relative'
+  },
+  timelineDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: '#667eea',
+    marginTop: '6px',
+    flexShrink: 0
+  },
+  timelineContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+  timelineText: {
+    fontSize: '14px',
+    color: '#ececec',
+    lineHeight: '1.5'
+  },
+  timelineMeta: {
+    fontSize: '12px',
+    color: '#6b7280'
+  },
+  blockersList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  blockerItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+    padding: '12px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  severityDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    marginTop: '6px',
+    flexShrink: 0
+  },
+  blockerText: {
+    fontSize: '14px',
+    color: '#ececec',
+    lineHeight: '1.5',
+    flex: 1
+  },
+  actionList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  actionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 12px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
+  actionCheckbox: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '4px',
+    border: '2px solid #4b5563',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    color: '#10b981'
+  },
+  actionText: {
+    fontSize: '14px',
+    color: '#ececec',
+    lineHeight: '1.4',
+    flex: 1
+  },
+  statusBadge: {
+    fontSize: '11px',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px'
+  },
+  emptyState: {
+    fontSize: '13px',
+    color: '#6b7280',
+    padding: '24px',
+    textAlign: 'center',
+    fontStyle: 'italic'
+  },
+  stageDisplay: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  stageBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 20px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#fff',
+    textTransform: 'capitalize',
+    alignSelf: 'flex-start'
+  },
+  stageUpdated: {
+    fontSize: '12px',
+    color: '#6b7280'
+  },
+  activityChartCompact: {
+    padding: '12px 0'
+  },
+  chartBarsCompact: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: '80px',
+    gap: '6px'
+  },
+  chartBarWrapperCompact: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  chartBarCompact: {
+    width: '100%',
+    height: '60px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '4px 4px 0 0',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  chartBarFillCompact: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderRadius: '4px 4px 0 0',
+    transition: 'height 0.3s ease'
+  },
+  chartBarLabelCompact: {
+    fontSize: '10px',
+    color: '#6b7280',
+    fontWeight: '600'
+  },
+  participantsListCompact: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  participantItemCompact: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  participantAvatarCompact: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#fff',
+    flexShrink: 0
+  },
+  participantInfoCompact: {
+    flex: 1,
+    minWidth: 0
+  },
+  participantNameCompact: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#ececec',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  participantTimeCompact: {
+    fontSize: '11px',
+    color: '#6b7280'
+  },
+  statsSummary: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  summaryRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 0',
+    borderBottom: '1px solid rgba(255,255,255,0.05)'
+  },
+  summaryLabel: {
+    fontSize: '13px',
+    color: '#8e8ea0',
+    fontWeight: '500'
+  },
+  summaryValue: {
+    fontSize: '14px',
+    color: '#ececec',
+    fontWeight: '600'
   }
 };

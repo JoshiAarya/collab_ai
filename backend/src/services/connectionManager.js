@@ -254,7 +254,8 @@ class ConnectionManager {
 
       // Check for AI invocation
       if (text.startsWith('@CollabAI')) {
-        await this.handleAIInvocation(ws, text, projectId, discussionId);
+        const meta = this.clients.get(ws);
+        await this.handleAIInvocation(ws, text, projectId, discussionId, meta?.userId);
       }
 
     } catch (error) {
@@ -269,7 +270,7 @@ class ConnectionManager {
   /**
    * Handle AI invocation
    */
-  async handleAIInvocation(ws, text, projectId, discussionId) {
+  async handleAIInvocation(ws, text, projectId, discussionId, userId = null) {
     const prompt = text.replace('@CollabAI', '').trim();
     
     try {
@@ -282,12 +283,13 @@ class ConnectionManager {
         status: 'generating'
       });
 
-      // Generate AI response
+      // Generate AI response (with userId for rate limiting)
       const aiReply = await aiService.generateResponse(
         projectId,
         discussionId,
         prompt,
-        project.activeLLM
+        project.activeLLM,
+        userId
       );
 
       // Save AI message
@@ -322,12 +324,41 @@ class ConnectionManager {
       logger.error('AI generation error', { 
         projectId, 
         discussionId, 
-        error: error.message 
+        error: error.message,
+        statusCode: error.statusCode
       });
       
+      // Handle rate limit errors specially
+      let errorText = `⚠️ ${error.message}`;
+      if (error.statusCode === 429 && error.retryAfter) {
+        errorText = `⚠️ Rate limit exceeded. Please try again in ${error.retryAfter} seconds.`;
+      }
+      
+      // Send error as a system message so it appears in chat
+      const errorMessage = await discussionService.addMessage(
+        discussionId,
+        projectId,
+        null,
+        'System',
+        errorText,
+        false
+      );
+
+      // Broadcast error as a chat message
+      this.broadcastToDiscussion(discussionId, {
+        type: 'project-chat',
+        message: {
+          user: errorMessage.user,
+          text: errorMessage.text,
+          time: errorMessage.timestamp,
+          isAI: false
+        }
+      });
+
+      // Also send ai-error event for frontend to stop loading state
       this.broadcastToDiscussion(discussionId, {
         type: 'ai-error',
-        message: 'AI service temporarily unavailable'
+        message: error.message
       });
     }
   }

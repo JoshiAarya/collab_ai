@@ -150,6 +150,8 @@ function CreateProjectModal({ token, onClose, onCreated }) {
   const [loading, setLoading] = useState(false);
   const [createdProject, setCreatedProject] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,10 +178,40 @@ function CreateProjectModal({ token, onClose, onCreated }) {
     }
   };
 
-  const handleCopyInviteCode = () => {
-    navigator.clipboard.writeText(createdProject.inviteCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleSendInviteEmail = async () => {
+    if (!emailInput.trim()) {
+      alert('Please enter an email address');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/projects/${createdProject._id}/invite-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ email: emailInput.trim() })
+        }
+      );
+
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`Invitation sent to ${emailInput}!`);
+        setEmailInput('');
+      } else {
+        alert(data.error || 'Failed to send invitation');
+      }
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('Failed to send invitation. Please try again.');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const handleDone = () => {
@@ -287,6 +319,36 @@ function CreateProjectModal({ token, onClose, onCreated }) {
                   </svg>
                   <span>Anyone with this link can join your project</span>
                 </div>
+
+                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #2d2d2d' }}>
+                  <p style={{ fontSize: '14px', color: '#b4b4b4', marginBottom: '12px' }}>
+                    Or send invitation via email:
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="email"
+                      placeholder="teammate@example.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      style={{
+                        ...styles.input,
+                        flex: 1,
+                        marginBottom: 0
+                      }}
+                    />
+                    <button
+                      onClick={handleSendInviteEmail}
+                      disabled={sendingEmail || !emailInput.trim()}
+                      style={{
+                        ...styles.submitBtn,
+                        padding: '12px 20px',
+                        opacity: sendingEmail || !emailInput.trim() ? 0.5 : 1
+                      }}
+                    >
+                      {sendingEmail ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div style={styles.modalActions}>
@@ -306,6 +368,8 @@ function JoinProjectModal({ token, onClose, onJoined }) {
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [joinedProject, setJoinedProject] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -324,7 +388,8 @@ function JoinProjectModal({ token, onClose, onJoined }) {
 
       const data = await response.json();
       if (data.success) {
-        onJoined();
+        setJoinedProject(data.project);
+        setSuccess(true);
       } else {
         setError(data.error);
       }
@@ -334,6 +399,54 @@ function JoinProjectModal({ token, onClose, onJoined }) {
       setLoading(false);
     }
   };
+
+  const handleSuccess = () => {
+    onJoined();
+    onClose();
+  };
+
+  if (success && joinedProject) {
+    return (
+      <div style={styles.modalOverlay} onClick={handleSuccess}>
+        <div style={{
+          ...styles.modal,
+          textAlign: 'center',
+          padding: '40px'
+        }} onClick={(e) => e.stopPropagation()}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: 'rgba(16, 163, 127, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#10a37f',
+            margin: '0 auto 24px',
+            animation: 'scaleIn 0.4s ease-out'
+          }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#ececec', marginBottom: '12px' }}>
+            Welcome to the Team!
+          </h2>
+          <p style={{ fontSize: '16px', color: '#b4b4b4', lineHeight: '1.6', marginBottom: '32px' }}>
+            You've successfully joined "{joinedProject.title}". Start collaborating with your team now!
+          </p>
+          <button onClick={handleSuccess} style={{
+            ...styles.submitBtn,
+            width: '100%',
+            background: '#10a37f'
+          }}>
+            Start Collaborating
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>

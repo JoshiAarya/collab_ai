@@ -28,6 +28,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true
   },
+  // Profile fields
+  bio: {
+    type: String,
+    maxlength: 200,
+    default: ''
+  },
+  theme: {
+    type: String,
+    enum: ['dark', 'light'],
+    default: 'dark'
+  },
   lastSeen: {
     type: Date,
     default: Date.now

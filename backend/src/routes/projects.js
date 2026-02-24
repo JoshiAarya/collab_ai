@@ -5,6 +5,8 @@ import discussionService from '../services/discussionService.js';
 import documentService from '../services/documentService.js';
 import summaryService from '../services/summaryService.js';
 import aiService from '../services/aiService.js';
+import ProjectInsights from '../models/ProjectInsights.js';
+import StrategicSignalEngine from '../core/intelligence/StrategicSignalEngine.js';
 
 const router = express.Router();
 
@@ -66,16 +68,127 @@ router.get('/:projectId', async (req, res) => {
 // Join project via invite code
 router.post('/join', async (req, res) => {
   try {
-    const { inviteCode } = req.body;
+    const { inviteCode, discussionId } = req.body;
 
     if (!inviteCode) {
       return res.status(400).json({ success: false, error: 'Invite code required' });
     }
 
     const project = await projectService.joinProject(inviteCode, req.user.userId);
-    res.json({ success: true, project });
+    
+    let alreadyMember = false;
+    let addedToDiscussion = false;
+    
+    // Check if user was already a member
+    const isMember = await projectService.isProjectMember(project._id, req.user.userId);
+    if (isMember) {
+      alreadyMember = true;
+    }
+    
+    // If discussionId is provided, also join that specific discussion
+    if (discussionId) {
+      try {
+        await discussionService.joinDiscussion(discussionId, req.user.userId);
+        addedToDiscussion = true;
+        console.log(`User ${req.user.userId} joined discussion ${discussionId}`);
+      } catch (discussionError) {
+        console.error('Failed to join discussion:', discussionError);
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      project, 
+      discussionId,
+      alreadyMember,
+      addedToDiscussion
+    });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Preview invite info (without joining)
+router.post('/invite-preview', async (req, res) => {
+  try {
+    const { inviteCode, discussionId } = req.body;
+
+    if (!inviteCode) {
+      return res.status(400).json({ success: false, error: 'Invite code required' });
+    }
+
+    // Find project by invite code
+    const Project = (await import('../models/Project.js')).default;
+    const project = await Project.findOne({ inviteCode }).lean();
+    
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Invalid invite code' });
+    }
+
+    // Check if user is already a member
+    const isMember = await projectService.isProjectMember(project._id, req.user.userId);
+    
+    let discussionInfo = null;
+    if (discussionId) {
+      const discussion = await discussionService.getDiscussionById(discussionId);
+      if (discussion) {
+        discussionInfo = {
+          id: discussion._id,
+          title: discussion.title,
+          isParticipant: discussion.participants.some(p => p.toString() === req.user.userId.toString())
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      project: {
+        id: project._id,
+        title: project.title,
+        memberCount: project.members?.length || 0
+      },
+      isMember,
+      discussion: discussionInfo
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Send project invite email
+router.post('/:projectId/invite-email', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email required' });
+    }
+
+    // Check if requester is project owner or member
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    // Get project details
+    const project = await projectService.getProjectById(projectId);
+    
+    // Import email service
+    const emailService = (await import('../services/emailService.js')).default;
+    
+    // Send email
+    await emailService.sendProjectInvite({
+      to: email,
+      inviterName: req.user.username,
+      projectTitle: project.title,
+      inviteCode: project.inviteCode
+    });
+
+    res.json({ success: true, message: 'Invitation sent successfully' });
+  } catch (error) {
+    console.error('Error sending project invite email:', error);
+    res.status(500).json({ success: false, error: 'Failed to send invitation email' });
   }
 });
 
@@ -246,6 +359,55 @@ router.post('/:projectId/discussions/:discussionId/invite', async (req, res) => 
   }
 });
 
+// Send discussion invite email
+router.post('/:projectId/discussions/:discussionId/invite-email', async (req, res) => {
+  try {
+    const { projectId, discussionId } = req.params;
+    const { email, discussionTitle } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email required' });
+    }
+
+    // Check if requester is in the discussion
+    const discussion = await discussionService.getDiscussionById(discussionId);
+    if (!discussion) {
+      return res.status(404).json({ success: false, error: 'Discussion not found' });
+    }
+
+    // Check if requester is project owner OR discussion participant
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    const isParticipant = discussion.participants.some(
+      p => p.toString() === req.user.userId.toString()
+    );
+
+    if (!isOwner && !isParticipant) {
+      return res.status(403).json({ success: false, error: 'Not authorized to send invites' });
+    }
+
+    // Get project details
+    const project = await projectService.getProjectById(projectId);
+    
+    // Import email service
+    const emailService = (await import('../services/emailService.js')).default;
+    
+    // Send email with invite code and discussion ID
+    await emailService.sendDiscussionInvite({
+      to: email,
+      inviterName: req.user.username,
+      projectTitle: project.title,
+      discussionTitle: discussionTitle || discussion.title,
+      inviteCode: project.inviteCode,
+      discussionId
+    });
+
+    res.json({ success: true, message: 'Invitation sent successfully' });
+  } catch (error) {
+    console.error('Error sending discussion invite email:', error);
+    res.status(500).json({ success: false, error: 'Failed to send invitation email' });
+  }
+});
+
 // Get project documents
 router.get('/:projectId/documents', async (req, res) => {
   try {
@@ -263,27 +425,59 @@ router.get('/:projectId/documents', async (req, res) => {
   }
 });
 
-// Upload document
-router.post('/:projectId/documents', async (req, res) => {
+// Debug endpoint: Get document chunks with embeddings
+router.get('/:projectId/documents/:documentId/chunks', async (req, res) => {
   try {
-    const { projectId } = req.params;
-    const { name, content, type } = req.body;
+    const { projectId, documentId } = req.params;
 
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
     if (!isMember) {
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
+    const chunks = await documentService.getDocumentChunks(documentId);
+    res.json({ success: true, chunks });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Upload document
+router.post('/:projectId/documents', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { title, content, fileType } = req.body;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    if (!title || !content) {
+      return res.status(400).json({ success: false, error: 'Title and content are required' });
+    }
+
+    // Normalize fileType to match enum values
+    let normalizedFileType = 'text';
+    if (fileType) {
+      if (fileType.includes('pdf')) {
+        normalizedFileType = 'pdf';
+      } else {
+        normalizedFileType = 'text';
+      }
+    }
+
     const document = await documentService.uploadDocument(
       projectId,
-      name,
+      title,
       content,
-      type || 'text',
+      normalizedFileType,
       req.user.userId
     );
 
     res.json({ success: true, document });
   } catch (error) {
+    console.error('Document upload error:', error);
     res.status(400).json({ success: false, error: error.message });
   }
 });
@@ -395,8 +589,9 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 // Get dashboard insights (owner only)
+// PHASE 3: Now uses persistent ProjectInsights with LLM fallback
+// PHASE 5: Now includes strategic signals
 router.get('/:projectId/dashboard', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -406,9 +601,6 @@ router.get('/:projectId/dashboard', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Only owner can view dashboard' });
     }
 
-    const project = await projectService.getProjectById(projectId);
-    const insights = await aiService.generateDashboardInsights(projectId, project.activeLLM);
-    
     // Get stats
     const discussions = await discussionService.getProjectDiscussions(projectId);
     const documents = await documentService.getProjectDocuments(projectId);
@@ -419,17 +611,47 @@ router.get('/:projectId/dashboard', async (req, res) => {
       totalMessages += messages.length;
     }
 
-    const dashboard = {
-      totalMessages,
-      activeDiscussions: discussions.length,
-      documentCount: documents.length,
-      topics: insights.topics || [],
-      decisions: insights.decisions || [],
-      openQuestions: insights.blockers || [],
-      suggestedNextSteps: insights.nextSteps?.join(', ') || 'Continue collaboration'
-    };
+    // PHASE 3: Try to get persistent insights first
+    let insights = await ProjectInsights.findOne({ projectId }).lean();
 
-    res.json({ success: true, dashboard });
+    // PHASE 5: Generate strategic signals (computed dynamically)
+    const signals = await StrategicSignalEngine.generateSignals({ projectId });
+
+    if (insights) {
+      // Use persistent insights (fast, deterministic)
+      const dashboard = {
+        totalMessages,
+        activeDiscussions: discussions.length,
+        documentCount: documents.length,
+        topics: insights.topics.map(t => t.name) || [],
+        decisions: insights.decisions.map(d => d.text) || [],
+        openQuestions: insights.blockers.filter(b => !b.resolved).map(b => b.text) || [],
+        actionItems: insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text) || [],
+        lastUpdated: insights.lastUpdated,
+        source: 'persistent', // Track data source
+        signals // PHASE 5: Strategic signals
+      };
+
+      res.json({ success: true, dashboard });
+    } else {
+      // Fallback to LLM generation (first time or no data yet)
+      const project = await projectService.getProjectById(projectId);
+      const llmInsights = await aiService.generateDashboardInsights(projectId, project.activeLLM);
+      
+      const dashboard = {
+        totalMessages,
+        activeDiscussions: discussions.length,
+        documentCount: documents.length,
+        topics: llmInsights.topics || [],
+        decisions: llmInsights.decisions || [],
+        openQuestions: llmInsights.blockers || [],
+        actionItems: llmInsights.nextSteps || [],
+        source: 'llm-generated', // Track data source
+        signals // PHASE 5: Strategic signals (empty if no insights)
+      };
+
+      res.json({ success: true, dashboard });
+    }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

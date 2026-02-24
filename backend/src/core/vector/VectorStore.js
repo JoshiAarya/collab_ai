@@ -1,60 +1,78 @@
 /**
- * Vector Store Abstraction Layer
- * Handles embeddings and similarity search
+ * Vector Store - PHASE 2 ACTIVATED
+ * Performs semantic search using embeddings stored in MongoDB
  */
+
+import DocumentChunk from '../../models/DocumentChunk.js';
+import logger from '../../utils/logger.js';
 
 class VectorStore {
   constructor() {
-    this.vectors = new Map(); // documentId -> { embedding, metadata }
-    this.dimension = 384; // Default embedding dimension
+    this.dimension = 384; // all-MiniLM-L6-v2 dimensions
   }
 
   /**
-   * Store a vector embedding
+   * Search for semantically similar document chunks
    */
-  async store(id, embedding, metadata = {}) {
-    if (!Array.isArray(embedding) || embedding.length !== this.dimension) {
-      throw new Error(`Invalid embedding dimension. Expected ${this.dimension}`);
-    }
+  async search(projectId, queryEmbedding, topK = 5) {
+    const startTime = Date.now();
 
-    this.vectors.set(id, {
-      embedding: embedding,
-      metadata: {
-        ...metadata,
-        timestamp: Date.now()
-      }
-    });
-
-    return id;
-  }
-
-  /**
-   * Search for similar vectors using cosine similarity
-   */
-  async search(queryEmbedding, topK = 5, filter = {}) {
-    if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== this.dimension) {
-      throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}`);
-    }
-
-    const results = [];
-
-    for (const [id, data] of this.vectors.entries()) {
-      // Apply filters
-      if (filter.projectId && data.metadata.projectId !== filter.projectId) {
-        continue;
+    try {
+      if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== this.dimension) {
+        throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
       }
 
-      const similarity = this.cosineSimilarity(queryEmbedding, data.embedding);
-      results.push({
-        id,
-        similarity,
-        metadata: data.metadata
+      // Fetch all chunks for the project
+      const chunks = await DocumentChunk.find({ projectId }).lean();
+
+      if (chunks.length === 0) {
+        logger.debug('No document chunks found for project', { projectId });
+        return [];
+      }
+
+      logger.debug('Computing similarities', {
+        projectId,
+        chunkCount: chunks.length,
+        topK
       });
-    }
 
-    // Sort by similarity (descending) and return top K
-    results.sort((a, b) => b.similarity - a.similarity);
-    return results.slice(0, topK);
+      // Compute cosine similarity for each chunk
+      const results = chunks.map(chunk => {
+        const similarity = this.cosineSimilarity(queryEmbedding, chunk.embedding);
+        return {
+          id: chunk._id,
+          documentId: chunk.documentId,
+          chunkIndex: chunk.chunkIndex,
+          content: chunk.content,
+          similarity,
+          metadata: chunk.metadata
+        };
+      });
+
+      // Sort by similarity (descending) and return top K
+      results.sort((a, b) => b.similarity - a.similarity);
+      const topResults = results.slice(0, topK);
+
+      const duration = Date.now() - startTime;
+
+      logger.ai('Vector search completed', {
+        projectId,
+        totalChunks: chunks.length,
+        topK,
+        resultsFound: topResults.length,
+        topSimilarity: topResults[0]?.similarity.toFixed(4),
+        duration: `${duration}ms`
+      });
+
+      return topResults;
+
+    } catch (error) {
+      logger.error('Vector search failed', {
+        projectId,
+        error: error.message
+      });
+      throw error;
+    }
   }
 
   /**
@@ -86,34 +104,49 @@ class VectorStore {
   }
 
   /**
-   * Delete a vector
+   * Get chunk count for a project
    */
-  async delete(id) {
-    return this.vectors.delete(id);
+  async count(projectId) {
+    try {
+      return await DocumentChunk.countDocuments({ projectId });
+    } catch (error) {
+      logger.error('Error counting chunks', { projectId, error: error.message });
+      return 0;
+    }
   }
 
   /**
-   * Clear all vectors (for testing)
+   * Delete all chunks for a document
    */
-  async clear() {
-    this.vectors.clear();
+  async deleteByDocument(documentId) {
+    try {
+      const result = await DocumentChunk.deleteMany({ documentId });
+      logger.info('Chunks deleted for document', {
+        documentId,
+        deletedCount: result.deletedCount
+      });
+      return result.deletedCount;
+    } catch (error) {
+      logger.error('Error deleting chunks', { documentId, error: error.message });
+      return 0;
+    }
   }
 
   /**
-   * Get vector count
+   * Clear all chunks for a project (use with caution)
    */
-  async count(filter = {}) {
-    if (!filter.projectId) {
-      return this.vectors.size;
+  async clear(projectId) {
+    try {
+      const result = await DocumentChunk.deleteMany({ projectId });
+      logger.warn('All chunks cleared for project', {
+        projectId,
+        deletedCount: result.deletedCount
+      });
+      return result.deletedCount;
+    } catch (error) {
+      logger.error('Error clearing chunks', { projectId, error: error.message });
+      return 0;
     }
-
-    let count = 0;
-    for (const [, data] of this.vectors.entries()) {
-      if (data.metadata.projectId === filter.projectId) {
-        count++;
-      }
-    }
-    return count;
   }
 }
 

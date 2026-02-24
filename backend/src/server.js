@@ -10,6 +10,7 @@ import { sanitize } from "./middleware/validation.js";
 // Routes
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
+import userRoutes from './routes/user.js';
 
 // Connect to MongoDB
 await connectDB();
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/user', userRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
