@@ -1,10 +1,13 @@
 # Multi-service Dockerfile for CollabAI
 # Runs both frontend and backend in a single container
 
-FROM node:18-alpine
+FROM node:20-slim
 
 # Install required tools
-RUN apk add --no-cache bash curl
+RUN apt-get update && apt-get install -y \
+    bash \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
