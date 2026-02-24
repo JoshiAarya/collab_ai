@@ -28,7 +28,7 @@ chmod +x start.sh
 ./start.sh
 ```
 
-Access the app at http://localhost:3000
+Access the app at **http://localhost:5173**
 
 For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
 
