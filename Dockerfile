@@ -27,7 +27,9 @@ RUN npm ci
 
 COPY frontend/ ./
 
-# Build frontend
+# Build frontend with production settings
+ENV NODE_ENV=production
+ENV VITE_API_BASE_URL=""
 RUN npm run build
 
 # Set environment to production

@@ -5,14 +5,34 @@
 
 const env = import.meta.env.MODE || 'development';
 
+// Determine base URLs based on environment
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  // If explicitly set to empty string or in production, use same origin
+  if (envUrl === '' || (env === 'production' && !envUrl)) {
+    return window.location.origin;
+  }
+  return envUrl || 'http://localhost:8080';
+};
+
+const getWsBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_WS_BASE_URL;
+  // If explicitly set to empty string or in production, derive from current location
+  if (envUrl === '' || (env === 'production' && !envUrl)) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}`;
+  }
+  return envUrl || 'ws://localhost:8080';
+};
+
 const config = {
   // Environment
   isDevelopment: env === 'development',
   isProduction: env === 'production',
 
   // API Configuration
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
-  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080',
+  apiBaseUrl: getApiBaseUrl(),
+  wsBaseUrl: getWsBaseUrl(),
 
   // API Endpoints
   api: {
