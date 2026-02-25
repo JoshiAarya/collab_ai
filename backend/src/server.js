@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import config from "./config/index.js";
 import logger from "./utils/logger.js";
 import connectDB from "./config/database.js";
@@ -11,6 +13,9 @@ import { sanitize } from "./middleware/validation.js";
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import userRoutes from './routes/user.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Connect to MongoDB
 await connectDB();
@@ -88,8 +93,19 @@ if (config.isDevelopment) {
   });
 }
 
-// 404 handler
-app.use(notFoundHandler);
+// Serve frontend static files in production
+if (config.nodeEnv === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+  
+  // Handle client-side routing - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+} else {
+  // 404 handler for development
+  app.use(notFoundHandler);
+}
 
 // Error handler (must be last)
 app.use(errorHandler);
