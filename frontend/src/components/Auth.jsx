@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import config from '../config/index.js';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -31,7 +32,7 @@ export default function Auth() {
 
   const handleGoogleLogin = () => {
     // Redirect to backend OAuth endpoint
-    window.location.href = 'http://localhost:8080/api/auth/google';
+    window.location.href = `${config.apiBaseUrl}/api/auth/google`;
   };
 
   return (

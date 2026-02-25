@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IoSettingsOutline } from 'react-icons/io5';
 import { MdChevronRight } from 'react-icons/md';
+import apiRequest from '../utils/api.js';
 
 const PROVIDERS = {
   openai: {
@@ -125,7 +126,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
     const newModel = { provider: providerId, model: modelId };
     
     try {
-      const response = await fetch(`http://localhost:8080/api/projects/${projectId}/llm`, {
+      const response = await apiRequest(`/api/projects/${projectId}/llm`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +150,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
     
     setIsSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/projects/${projectId}/api-key`, {
+      const response = await apiRequest(`/api/projects/${projectId}/api-key`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

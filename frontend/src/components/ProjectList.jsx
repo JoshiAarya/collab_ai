@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
+import apiRequest from '../utils/api.js';
 
 export default function ProjectList({ onSelectProject }) {
   const [projects, setProjects] = useState([]);
@@ -16,7 +17,7 @@ export default function ProjectList({ onSelectProject }) {
 
   const loadProjects = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/projects', {
+      const response = await apiRequest('/api/projects', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -158,7 +159,7 @@ function CreateProjectModal({ token, onClose, onCreated }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/api/projects', {
+      const response = await apiRequest('/api/projects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,7 +188,7 @@ function CreateProjectModal({ token, onClose, onCreated }) {
     setSendingEmail(true);
     try {
       const response = await fetch(
-        `http://localhost:8080/api/projects/${createdProject._id}/invite-email`,
+        `/api/projects/${createdProject._id}/invite-email`,
         {
           method: 'POST',
           headers: {
@@ -377,7 +378,7 @@ function JoinProjectModal({ token, onClose, onJoined }) {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8080/api/projects/join', {
+      const response = await apiRequest('/api/projects/join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -8,6 +8,7 @@ import ProjectList from './components/ProjectList';
 import ProjectWorkspace from './components/ProjectWorkspace';
 import Onboarding from './components/Onboarding';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import apiRequest from './utils/api.js';
 import { getInviteCodeFromUrl, getDiscussionInviteFromUrl, clearUrl } from './utils/router';
 
 function AppContent() {
@@ -67,7 +68,7 @@ function AppContent() {
         requestBody.discussionId = discussionId;
       }
       
-      const response = await fetch('http://localhost:8080/api/projects/join', {
+      const response = await apiRequest('/api/projects/join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -255,7 +256,7 @@ function InviteConfirmModal({ inviteCode, discussionId, token, onAccept, onDecli
 
   const fetchInviteInfo = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/projects/invite-preview', {
+      const response = await apiRequest('/api/projects/invite-preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

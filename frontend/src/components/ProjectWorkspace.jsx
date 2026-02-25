@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify';
 import ModelSelector from './ModelSelector';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
+import apiRequest, { getWsUrl } from '../utils/api.js';
 
 export default function ProjectWorkspace({ project, onBack }) {
   const [discussions, setDiscussions] = useState([]);
@@ -106,8 +107,8 @@ export default function ProjectWorkspace({ project, onBack }) {
   const loadDiscussions = async () => {
     setIsLoadingDiscussions(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
@@ -133,7 +134,7 @@ export default function ProjectWorkspace({ project, onBack }) {
 
   const connectWebSocket = () => {
     setWsStatus('connecting');
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = new WebSocket(getWsUrl());
     
     socket.onopen = () => {
       setWsStatus('connected');
@@ -558,8 +559,8 @@ export default function ProjectWorkspace({ project, onBack }) {
                         const reader = new FileReader();
                         reader.onload = async (event) => {
                           try {
-                            await fetch(
-                              `http://localhost:8080/api/projects/${project._id}/documents`,
+                            await apiRequest(
+                              `/api/projects/${project._id}/documents`,
                               {
                                 method: 'POST',
                                 headers: {
@@ -620,8 +621,8 @@ export default function ProjectWorkspace({ project, onBack }) {
           onClose={() => setShowCreateDiscussion(false)}
           onCreate={async (name) => {
             try {
-              const response = await fetch(
-                `http://localhost:8080/api/projects/${project._id}/discussions`,
+              const response = await apiRequest(
+                `/api/projects/${project._id}/discussions`,
                 {
                   method: 'POST',
                   headers: {
@@ -785,8 +786,8 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
   const loadData = async () => {
     try {
       // Load discussion
-      const discResponse = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions`,
+      const discResponse = await apiRequest(
+        `/api/projects/${project._id}/discussions`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const discData = await discResponse.json();
@@ -796,8 +797,8 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
       }
 
       // Load project members
-      const projectResponse = await fetch(
-        `http://localhost:8080/api/projects/${project._id}`,
+      const projectResponse = await apiRequest(
+        `/api/projects/${project._id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const projectData = await projectResponse.json();
@@ -813,8 +814,8 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 
   const handleAddMember = async (userId) => {
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions/${discussionId}/invite`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${discussionId}/invite`,
         {
           method: 'POST',
           headers: {
@@ -850,8 +851,8 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 
     setSendingEmail(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions/${discussionId}/invite-email`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${discussionId}/invite-email`,
         {
           method: 'POST',
           headers: {
@@ -1026,8 +1027,8 @@ function Dashboard({ project, onClose, token }) {
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/dashboard`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/dashboard`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
@@ -1391,8 +1392,8 @@ function Documents({ project, onClose, token }) {
 
   const loadDocuments = async () => {
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/documents`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/documents`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
@@ -1421,8 +1422,8 @@ function Documents({ project, onClose, token }) {
     
     reader.onload = async (event) => {
       try {
-        const response = await fetch(
-          `http://localhost:8080/api/projects/${project._id}/documents`,
+        const response = await apiRequest(
+          `/api/projects/${project._id}/documents`,
           {
             method: 'POST',
             headers: {
@@ -1542,8 +1543,8 @@ function Settings({ project, onClose, token, isOwner }) {
 
     setSendingEmail(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/invite-email`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/invite-email`,
         {
           method: 'POST',
           headers: {
@@ -1695,8 +1696,8 @@ function Summaries({ project, discussion, onClose, token }) {
 
   const loadSummaries = async () => {
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/summaries`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/summaries`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
@@ -1717,8 +1718,8 @@ function Summaries({ project, discussion, onClose, token }) {
   const generateSummary = async (prompt = null) => {
     setGenerating(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summarize`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${discussion._id}/summarize`,
         {
           method: 'POST',
           headers: {
@@ -1747,8 +1748,8 @@ function Summaries({ project, discussion, onClose, token }) {
 
     setRegenerating(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
         {
           method: 'PUT',
           headers: {
@@ -1775,8 +1776,8 @@ function Summaries({ project, discussion, onClose, token }) {
     if (!confirm('Delete this summary?')) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${discussion._id}/summaries/${summaryId}`,
         {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }

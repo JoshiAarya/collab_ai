@@ -27,9 +27,11 @@ RUN npm ci
 
 COPY frontend/ ./
 
-# Build frontend with production settings
-ENV NODE_ENV=production
-ENV VITE_API_BASE_URL=""
+# Build args for production URLs
+ARG VITE_API_BASE_URL=https://collab-ai-j39n.onrender.com
+ARG VITE_WS_BASE_URL=wss://collab-ai-j39n.onrender.com
+
+# Build frontend
 RUN npm run build
 
 # Set environment to production

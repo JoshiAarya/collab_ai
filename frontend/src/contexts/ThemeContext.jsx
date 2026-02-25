@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import apiRequest from '../utils/api.js';
 
 const ThemeContext = createContext(null);
 
@@ -57,7 +58,7 @@ export function ThemeProvider({ children }) {
     // Update on backend
     if (token) {
       try {
-        await fetch('http://localhost:8080/api/user/profile', {
+        await apiRequest('/api/user/profile', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

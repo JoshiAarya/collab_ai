@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
 import { toast } from 'react-toastify';
+import apiRequest from '../utils/api.js';
 
 export default function ProfileModal({ onClose }) {
   const { user, token, refreshAuth } = useAuth();
@@ -27,7 +28,7 @@ export default function ProfileModal({ onClose }) {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/user/stats', {
+      const response = await apiRequest('/api/user/stats', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -44,7 +45,7 @@ export default function ProfileModal({ onClose }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/api/user/profile', {
+      const response = await apiRequest('/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +84,7 @@ export default function ProfileModal({ onClose }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/api/user/password', {
+      const response = await apiRequest('/api/user/password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
