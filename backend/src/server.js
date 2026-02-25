@@ -99,13 +99,17 @@ if (config.nodeEnv === 'production') {
   app.use(express.static(frontendPath));
   
   // Handle client-side routing - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
+  app.use((req, res, next) => {
+    // Skip API routes and health check
+    if (req.path.startsWith('/api') || req.path === '/health') {
+      return next();
+    }
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
-} else {
-  // 404 handler for development
-  app.use(notFoundHandler);
 }
+
+// 404 handler
+app.use(notFoundHandler);
 
 // Error handler (must be last)
 app.use(errorHandler);
