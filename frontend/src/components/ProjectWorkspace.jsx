@@ -66,13 +66,14 @@ export default function ProjectWorkspace({ project, onBack }) {
 
   useEffect(() => {
     if (currentDiscussion && ws && ws.readyState === WebSocket.OPEN) {
+      console.log('Joining discussion:', currentDiscussion._id);
       ws.send(JSON.stringify({
         type: 'join-project',
         projectId: project._id,
         discussionId: currentDiscussion._id
       }));
     }
-  }, [currentDiscussion, ws]);
+  }, [currentDiscussion, ws, ws?.readyState]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -134,14 +135,28 @@ export default function ProjectWorkspace({ project, onBack }) {
 
   const connectWebSocket = () => {
     setWsStatus('connecting');
-    const socket = new WebSocket(getWsUrl());
+    const wsUrl = getWsUrl();
+    console.log('Connecting to WebSocket:', wsUrl);
+    const socket = new WebSocket(wsUrl);
     
     socket.onopen = () => {
+      console.log('WebSocket connected');
       setWsStatus('connected');
       socket.send(JSON.stringify({ type: 'auth', token }));
+      
+      // If we already have a current discussion, join it
+      if (currentDiscussion) {
+        console.log('Auto-joining discussion on connect:', currentDiscussion._id);
+        socket.send(JSON.stringify({
+          type: 'join-project',
+          projectId: project._id,
+          discussionId: currentDiscussion._id
+        }));
+      }
     };
 
     socket.onmessage = (e) => {
+      console.log('WebSocket message received:', e.data);
       const data = JSON.parse(e.data);
       
       if (data.type === 'discussion-joined') {
@@ -165,7 +180,8 @@ export default function ProjectWorkspace({ project, onBack }) {
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
       setWsStatus('disconnected');
       // Auto-reconnect after 3 seconds
       setTimeout(() => {
@@ -176,7 +192,8 @@ export default function ProjectWorkspace({ project, onBack }) {
       }, 3000);
     };
 
-    socket.onerror = () => {
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
       setWsStatus('disconnected');
     };
 
@@ -198,7 +215,16 @@ export default function ProjectWorkspace({ project, onBack }) {
   };
 
   const sendMessage = () => {
-    if (!input.trim() || !ws || ws.readyState !== WebSocket.OPEN || isSendingMessage) return;
+    console.log('sendMessage called', { 
+      hasInput: !!input.trim(), 
+      wsState: ws?.readyState, 
+      isSending: isSendingMessage 
+    });
+    
+    if (!input.trim() || !ws || ws.readyState !== WebSocket.OPEN || isSendingMessage) {
+      console.log('Message not sent - conditions not met');
+      return;
+    }
     
     setIsSendingMessage(true);
     
@@ -207,10 +233,13 @@ export default function ProjectWorkspace({ project, onBack }) {
       setAiThinking(true);
     }
     
-    ws.send(JSON.stringify({
+    const message = {
       type: 'project-chat',
       text: input
-    }));
+    };
+    
+    console.log('Sending WebSocket message:', message);
+    ws.send(JSON.stringify(message));
     
     setInput('');
     setShowMentions(false);

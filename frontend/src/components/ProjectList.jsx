@@ -391,6 +391,8 @@ function JoinProjectModal({ token, onClose, onJoined }) {
       if (data.success) {
         setJoinedProject(data.project);
         setSuccess(true);
+        // Immediately reload projects in parent
+        onJoined();
       } else {
         setError(data.error);
       }
