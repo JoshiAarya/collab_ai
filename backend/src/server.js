@@ -8,6 +8,8 @@ import connectDB from "./config/database.js";
 import connectionManager from "./services/connectionManager.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { sanitize } from "./middleware/validation.js";
+import swaggerUi from 'swagger-ui-express'
+import { swaggerSpec } from './config/swagger.js'
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -107,6 +109,7 @@ if (config.nodeEnv === 'production') {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
 // 404 handler
 app.use(notFoundHandler);

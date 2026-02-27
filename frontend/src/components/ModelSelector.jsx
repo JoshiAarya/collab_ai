@@ -110,7 +110,14 @@ const PROVIDERS = {
   }
 };
 
-export default function ModelSelector({ currentModel, onModelChange, projectId, token }) {
+export default function ModelSelector({ currentModel, onModelChange, projectId, token, colors = {
+  background: '#0d0d0d',
+  surface: '#1a1a1a',
+  border: '#2d2d2d',
+  text: '#ececec',
+  textSecondary: '#b4b4b4',
+  textTertiary: '#6b6b6b'
+} }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,7 +196,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
     <div style={{ position: 'relative' }}>
       <button 
         onClick={() => setShowDropdown(!showDropdown)}
-        style={styles.modelSelector}
+        style={{...styles.modelSelector, background: colors.surface, border: `1px solid ${colors.border}`, color: colors.text}}
       >
         <span style={{ fontSize: '18px' }}>{currentProviderInfo.icon}</span>
         <span style={{ fontWeight: '500' }}>{currentModelInfo.name}</span>
@@ -204,13 +211,13 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
             setShowDropdown(false);
             setSelectedProvider(null);
           }} />
-          <div style={styles.dropdown}>
+          <div style={{...styles.dropdown, background: colors.surface, border: `1px solid ${colors.border}`}}>
             <input
               type="text"
               placeholder="Search models..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={styles.searchInput}
+              style={{...styles.searchInput, background: colors.background, color: colors.text, borderBottom: `1px solid ${colors.border}`}}
               autoFocus
             />
             
@@ -231,7 +238,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
                     <span style={{...styles.providerIcon, color: provider.color}}>{provider.icon}</span>
-                    <span style={styles.providerName}>{provider.name}</span>
+                    <span style={{...styles.providerName, color: colors.text}}>{provider.name}</span>
                     <div style={{ flex: 1 }} />
                     
                     {/* Settings icon - only for non-server providers */}
@@ -285,7 +292,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                           : 'transparent'
                       }}
                     >
-                      <span style={styles.modelName}>{model.name}</span>
+                      <span style={{...styles.modelName, color: colors.text}}>{model.name}</span>
                       {currentModel.provider === selectedProvider && currentModel.model === model.id && (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10a37f" strokeWidth="2">
                           <path d="M20 6L9 17l-5-5"/>
@@ -302,9 +309,9 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
 
       {showApiKeyModal && (
         <div style={styles.modalOverlay} onClick={() => setShowApiKeyModal(false)}>
-          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Set API Key for {PROVIDERS[apiKeyProvider]?.name}</h3>
+          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}}>
+            <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+              <h3 style={{...styles.modalTitle, color: colors.text}}>Set API Key for {PROVIDERS[apiKeyProvider]?.name}</h3>
               <button onClick={() => setShowApiKeyModal(false)} style={styles.closeBtn}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12"/>
@@ -313,7 +320,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
             </div>
             
             <div style={styles.modalBody}>
-              <p style={styles.modalDesc}>
+              <p style={{...styles.modalDesc, color: colors.textSecondary}}>
                 {apiKeyProvider === 'server' 
                   ? 'Server uses the backend AI. No configuration needed.'
                   : `Enter your ${PROVIDERS[apiKeyProvider]?.name} API key to use their models.`
@@ -322,18 +329,18 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
               
               {apiKeyProvider !== 'server' && (
                 <>
-                  <label style={styles.inputLabel}>API Key</label>
+                  <label style={{...styles.inputLabel, color: colors.text}}>API Key</label>
                   <input
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder={`Enter your ${PROVIDERS[apiKeyProvider]?.name} API key`}
-                    style={styles.input}
+                    style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
                     autoFocus
                   />
                   
                   <div style={styles.modalActions}>
-                    <button onClick={() => setShowApiKeyModal(false)} style={styles.cancelBtn}>
+                    <button onClick={() => setShowApiKeyModal(false)} style={{...styles.cancelBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
                       Cancel
                     </button>
                     <button onClick={handleApiKeySubmit} style={styles.submitBtn} disabled={!apiKey.trim() || isSubmitting}>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ModelSelector from './ModelSelector';
@@ -8,6 +9,8 @@ import { getAvatarColor, getInitials } from '../utils/avatarColors';
 import apiRequest, { getWsUrl } from '../utils/api.js';
 
 export default function ProjectWorkspace({ project, onBack }) {
+  const { user, token } = useAuth();
+  const { colors } = useTheme();
   const [discussions, setDiscussions] = useState([]);
   const [currentDiscussion, setCurrentDiscussion] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -34,7 +37,6 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [wsStatus, setWsStatus] = useState('connecting'); // connecting, connected, disconnected, reconnecting
   const [aiThinking, setAiThinking] = useState(false);
   
-  const { token, user } = useAuth();
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const mentionRef = useRef(null);
@@ -78,6 +80,15 @@ export default function ProjectWorkspace({ project, onBack }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Scroll to bottom when returning to chat view
+  useEffect(() => {
+    if (!showDashboard && !showDocuments && !showSettings && !showSummaries && messages.length > 0) {
+      setTimeout(() => {
+        endRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [showDashboard, showDocuments, showSettings, showSummaries]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -288,15 +299,15 @@ export default function ProjectWorkspace({ project, onBack }) {
   };
 
   if (showSettings) {
-    return <Settings project={project} onClose={() => setShowSettings(false)} token={token} isOwner={isOwner} />;
+    return <Settings project={project} onClose={() => setShowSettings(false)} token={token} isOwner={isOwner} colors={colors} />;
   }
 
   if (showDashboard) {
-    return <Dashboard project={project} onClose={() => setShowDashboard(false)} token={token} />;
+    return <Dashboard project={project} onClose={() => setShowDashboard(false)} token={token} colors={colors} />;
   }
 
   if (showDocuments) {
-    return <Documents project={project} onClose={() => setShowDocuments(false)} token={token} />;
+    return <Documents project={project} onClose={() => setShowDocuments(false)} token={token} colors={colors} />;
   }
 
   if (showSummaries && currentDiscussion) {
@@ -304,12 +315,13 @@ export default function ProjectWorkspace({ project, onBack }) {
       project={project} 
       discussion={currentDiscussion}
       onClose={() => setShowSummaries(false)} 
-      token={token} 
+      token={token}
+      colors={colors}
     />;
   }
 
   return (
-    <div style={styles.container}>
+    <div style={{...styles.container, background: colors.background}}>
       {/* Sidebar */}
       <Sidebar 
         isOpen={sidebarOpen} 
@@ -344,7 +356,7 @@ export default function ProjectWorkspace({ project, onBack }) {
         }
       >
         <div style={styles.sidebarHeader}>
-          <button onClick={onBack} style={styles.sidebarHeaderBtn}>
+          <button onClick={onBack} style={{...styles.sidebarHeaderBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -352,7 +364,7 @@ export default function ProjectWorkspace({ project, onBack }) {
           </button>
           <button 
             onClick={() => setSidebarOpen(false)} 
-            style={styles.closeSidebarBtn}
+            style={{...styles.closeSidebarBtn, color: colors.textTertiary}}
             title="Close sidebar"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -379,7 +391,7 @@ export default function ProjectWorkspace({ project, onBack }) {
               <div style={{...styles.loadingSpinner, margin: '0 auto'}}></div>
             </div>
           ) : discussions.length === 0 ? (
-            <div style={{padding: '20px', textAlign: 'center', color: '#8e8ea0', fontSize: '14px'}}>
+            <div style={{padding: '20px', textAlign: 'center', color: colors.textSecondary, fontSize: '14px'}}>
               No discussions yet
             </div>
           ) : (
@@ -392,6 +404,7 @@ export default function ProjectWorkspace({ project, onBack }) {
                 key={disc._id}
                 style={{
                   ...styles.discussionItem,
+                  color: colors.text,
                   background: currentDiscussion?._id === disc._id ? 'rgba(255,255,255,0.1)' : 'transparent',
                   fontWeight: disc.isMain ? '600' : '400',
                   borderLeft: disc.isMain ? '3px solid #10a37f' : 'none',
@@ -441,53 +454,79 @@ export default function ProjectWorkspace({ project, onBack }) {
       {/* Main */}
       <div style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
         {/* Header */}
-        <div style={styles.header}>
+        <div style={{...styles.header, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
           <div style={styles.headerTitle}>
             <ModelSelector 
               currentModel={currentModel}
               onModelChange={setCurrentModel}
               projectId={project._id}
               token={token}
+              colors={colors}
             />
-            <h2 style={styles.title}>{currentDiscussion?.title || project.title}</h2>
+            <h2 style={{...styles.title, color: colors.text}}>{currentDiscussion?.title || project.title}</h2>
           </div>
 
           <div style={styles.headerActions}>
-            <button onClick={() => setShowMenu(!showMenu)} style={styles.menuBtn}>
+            <button onClick={() => setShowMenu(!showMenu)} style={{...styles.menuBtn, color: colors.text}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
               </svg>
             </button>
             
             {showMenu && (
-              <div style={styles.dropdown}>
+              <div style={{...styles.dropdown, background: colors.surface, border: `1px solid ${colors.border}`}}>
                 {isOwner && (
-                  <button onClick={() => { setShowDashboard(true); setShowMenu(false); }} style={styles.dropdownItem}>
+                  <button 
+                    onClick={() => { setShowDashboard(true); setShowMenu(false); }} 
+                    style={{...styles.dropdownItem, color: colors.text}}
+                    onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                     </svg>
                     Dashboard
                   </button>
                 )}
-                <button onClick={() => { setShowDocuments(true); setShowMenu(false); }} style={styles.dropdownItem}>
+                <button 
+                  onClick={() => { setShowDocuments(true); setShowMenu(false); }} 
+                  style={{...styles.dropdownItem, color: colors.text}}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
                   </svg>
                   Documents
                 </button>
-                <button onClick={() => { setShowSummaries(true); setShowMenu(false); }} style={styles.dropdownItem}>
+                <button 
+                  onClick={() => { setShowSummaries(true); setShowMenu(false); }} 
+                  style={{...styles.dropdownItem, color: colors.text}}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                   </svg>
                   Summaries
                 </button>
-                <button onClick={() => { setShowSettings(true); setShowMenu(false); }} style={styles.dropdownItem}>
+                <button 
+                  onClick={() => { setShowSettings(true); setShowMenu(false); }} 
+                  style={{...styles.dropdownItem, color: colors.text}}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"/>
                   </svg>
                   Settings
                 </button>
-                <button onClick={() => { loadDiscussions(); setShowMenu(false); }} style={styles.dropdownItem}>
+                <button 
+                  onClick={() => { loadDiscussions(); setShowMenu(false); }} 
+                  style={{...styles.dropdownItem, color: colors.text}}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
                   </svg>
@@ -498,21 +537,21 @@ export default function ProjectWorkspace({ project, onBack }) {
           </div>
         </div>
 
-        <div style={styles.messages}>
+        <div style={{...styles.messages, background: colors.background}}>
           {isLoadingMessages ? (
             <div style={styles.loadingState}>
               <div style={styles.loadingSpinner}></div>
-              <p style={styles.loadingText}>Loading messages...</p>
+              <p style={{...styles.loadingText, color: colors.textSecondary}}>Loading messages...</p>
             </div>
           ) : messages.length === 0 ? (
             <div style={styles.empty}>
-              <h2 style={styles.emptyTitle}>{currentDiscussion?.title || project.title}</h2>
-              <p style={styles.emptyText}>Start the conversation</p>
-              <p style={styles.emptyHint}>Use @CollabAI to get AI assistance</p>
+              <h2 style={{...styles.emptyTitle, color: colors.text}}>{currentDiscussion?.title || project.title}</h2>
+              <p style={{...styles.emptyText, color: colors.textSecondary}}>Start the conversation</p>
+              <p style={{...styles.emptyHint, color: colors.textTertiary}}>Use @CollabAI to get AI assistance</p>
             </div>
           ) : (
             <>
-              {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} />)}
+              {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} colors={colors} />)}
               {aiThinking && (
                 <div style={styles.aiThinkingIndicator}>
                   <div style={{maxWidth: '48rem', margin: '0 auto', padding: '0 24px', display: 'flex', gap: '24px'}}>
@@ -537,14 +576,16 @@ export default function ProjectWorkspace({ project, onBack }) {
           </div>
         )}
 
-        <div style={styles.inputArea}>
+        <div style={{...styles.inputArea, background: colors.surface, borderTop: `1px solid ${colors.border}`}}>
           {showMentions && (
-            <div ref={mentionRef} style={styles.mentionBox}>
+            <div ref={mentionRef} style={{...styles.mentionBox, background: colors.surface, border: `1px solid ${colors.border}`}}>
               {getMentionOptions().map((option, i) => (
                 <div
                   key={i}
                   onClick={() => insertMention(option.username)}
-                  style={styles.mentionItem}
+                  style={{...styles.mentionItem, ':hover': {background: colors.surfaceHover}}}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <div style={{
                     ...styles.mentionAvatar,
@@ -553,15 +594,15 @@ export default function ProjectWorkspace({ project, onBack }) {
                     {option.name.charAt(0).toUpperCase()}
                   </div>
                   <div style={styles.mentionInfo}>
-                    <div style={styles.mentionName}>{option.name}</div>
-                    <div style={styles.mentionUsername}>{option.username}</div>
+                    <div style={{...styles.mentionName, color: colors.text}}>{option.name}</div>
+                    <div style={{...styles.mentionUsername, color: colors.textSecondary}}>{option.username}</div>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          <div style={styles.inputBox}>
+          <div style={{...styles.inputBox, background: colors.surface, border: `1px solid ${colors.border}`}}>
             <div style={{ position: 'relative' }}>
               <button 
                 onClick={() => setShowAttachMenu(!showAttachMenu)}
@@ -573,8 +614,8 @@ export default function ProjectWorkspace({ project, onBack }) {
               </button>
               
               {showAttachMenu && (
-                <div style={styles.attachMenu}>
-                  <label style={styles.attachMenuItem}>
+                <div style={{...styles.attachMenu, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                  <label style={{...styles.attachMenuItem, color: colors.text}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
                     </svg>
@@ -624,7 +665,7 @@ export default function ProjectWorkspace({ project, onBack }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Send a message..."
-              style={styles.textarea}
+              style={{...styles.textarea, color: colors.text}}
               rows={1}
             />
             
@@ -647,6 +688,7 @@ export default function ProjectWorkspace({ project, onBack }) {
       {/* Create Discussion Modal */}
       {showCreateDiscussion && (
         <CreateDiscussionModal
+          colors={colors}
           onClose={() => setShowCreateDiscussion(false)}
           onCreate={async (name) => {
             try {
@@ -679,6 +721,7 @@ export default function ProjectWorkspace({ project, onBack }) {
           project={project}
           discussionId={inviteDiscussionId}
           token={token}
+          colors={colors}
           onClose={() => {
             setShowInviteToDiscussion(false);
             setInviteDiscussionId(null);
@@ -692,7 +735,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   );
 }
 
-function MessageBubble({ message, currentUser }) {
+function MessageBubble({ message, currentUser, colors }) {
   const isAI = message.user === 'CollabAI';
   const isCurrentUser = message.user === currentUser;
   const safeHTML = DOMPurify.sanitize(marked.parse(message.text || ''));
@@ -702,8 +745,8 @@ function MessageBubble({ message, currentUser }) {
     <div style={{
       padding: '24px 0',
       width: '100%',
-      background: isAI ? '#1a1a1a' : 'transparent',
-      borderBottom: '1px solid #2d2d2d'
+      background: isAI ? colors.surface : 'transparent',
+      borderBottom: `1px solid ${colors.border}`
     }}>
       <div style={{
         maxWidth: '48rem',
@@ -745,7 +788,7 @@ function MessageBubble({ message, currentUser }) {
           <div style={{
             fontSize: '14px',
             fontWeight: '600',
-            color: '#ececec',
+            color: colors.text,
             marginBottom: '8px'
           }}>
             {message.user}
@@ -760,15 +803,15 @@ function MessageBubble({ message, currentUser }) {
   );
 }
 
-function CreateDiscussionModal({ onClose, onCreate }) {
+function CreateDiscussionModal({ onClose, onCreate, colors }) {
   const [name, setName] = useState('');
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h3 style={styles.modalTitle}>Create New Discussion</h3>
-          <button onClick={onClose} style={styles.modalClose}>
+      <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
+        <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+          <h3 style={{...styles.modalTitle, color: colors.text}}>Create New Discussion</h3>
+          <button onClick={onClose} style={{...styles.modalClose, color: colors.textTertiary}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -780,11 +823,11 @@ function CreateDiscussionModal({ onClose, onCreate }) {
             placeholder="Discussion name..."
             value={name}
             onChange={(e) => setName(e.target.value)}
-            style={styles.modalInput}
+            style={{...styles.modalInput, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
             autoFocus
           />
           <div style={styles.modalActions}>
-            <button onClick={onClose} style={styles.modalCancel}>Cancel</button>
+            <button onClick={onClose} style={{...styles.modalCancel, border: `1px solid ${colors.border}`, color: colors.text}}>Cancel</button>
             <button 
               onClick={() => name.trim() && onCreate(name.trim())} 
               style={styles.modalSubmit}
@@ -799,7 +842,7 @@ function CreateDiscussionModal({ onClose, onCreate }) {
   );
 }
 
-function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvite }) {
+function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvite, colors }) {
   const [discussion, setDiscussion] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -918,10 +961,10 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h3 style={styles.modalTitle}>Invite to {discussion?.title || 'Discussion'}</h3>
-          <button onClick={onClose} style={styles.modalClose}>
+      <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
+        <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+          <h3 style={{...styles.modalTitle, color: colors.text}}>Invite to {discussion?.title || 'Discussion'}</h3>
+          <button onClick={onClose} style={{...styles.modalClose, color: colors.textTertiary}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -929,17 +972,17 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
         </div>
         
         {loading ? (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#b4b4b4' }}>Loading...</div>
+          <div style={{ padding: '20px', textAlign: 'center', color: colors.textSecondary }}>Loading...</div>
         ) : (
           <div style={styles.modalBody}>
             {/* Tabs */}
-            <div style={styles.tabs}>
+            <div style={{...styles.tabs, borderBottom: `1px solid ${colors.border}`}}>
               <button
                 onClick={() => setActiveTab('members')}
                 style={{
                   ...styles.tab,
                   borderBottom: activeTab === 'members' ? '2px solid #8b5cf6' : '2px solid transparent',
-                  color: activeTab === 'members' ? '#ececec' : '#6b6b6b'
+                  color: activeTab === 'members' ? colors.text : colors.textTertiary
                 }}
               >
                 Project Members
@@ -949,7 +992,7 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
                 style={{
                   ...styles.tab,
                   borderBottom: activeTab === 'external' ? '2px solid #8b5cf6' : '2px solid transparent',
-                  color: activeTab === 'external' ? '#ececec' : '#6b6b6b'
+                  color: activeTab === 'external' ? colors.text : colors.textTertiary
                 }}
               >
                 External Invite
@@ -960,42 +1003,82 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
             {activeTab === 'members' ? (
               <div style={styles.tabContent}>
                 {availableMembers.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#b4b4b4' }}>
+                  <div style={{ padding: '20px', textAlign: 'center', color: colors.textSecondary }}>
                     All project members are already in this discussion
                   </div>
                 ) : (
                   <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {availableMembers.map(member => (
-                      <div key={member._id} style={styles.memberItem}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={styles.memberAvatar}>
-                            {member.username ? member.username.charAt(0).toUpperCase() : '?'}
+                    {availableMembers.map(member => {
+                      const avatarColor = getAvatarColor(member.username || 'User');
+                      const initials = getInitials(member.username || 'User');
+                      return (
+                        <div key={member._id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '12px',
+                          background: colors.background,
+                          borderRadius: '8px',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
+                              background: avatarColor,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              flexShrink: 0
+                            }}>
+                              {initials}
+                            </div>
+                            <div>
+                              <div style={{ color: colors.text, fontSize: '14px', fontWeight: '500' }}>
+                                {member.username || 'Unknown'}
+                              </div>
+                              <div style={{ color: colors.textSecondary, fontSize: '12px', marginTop: '2px' }}>
+                                {member.email || ''}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div style={{ color: '#ececec', fontSize: '14px' }}>{member.username || 'Unknown'}</div>
-                            <div style={{ color: '#b4b4b4', fontSize: '12px' }}>{member.email || ''}</div>
-                          </div>
+                          <button
+                            onClick={() => handleAddMember(member._id)}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#8b5cf6',
+                              border: 'none',
+                              borderRadius: '6px',
+                              color: '#fff',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = '#7c3aed'}
+                            onMouseLeave={(e) => e.target.style.background = '#8b5cf6'}
+                          >
+                            Add
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleAddMember(member._id)}
-                          style={styles.addBtn}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
             ) : (
               <div style={styles.tabContent}>
-                <p style={styles.inviteDesc}>
+                <p style={{...styles.inviteDesc, color: colors.textSecondary}}>
                   Share this link with people outside the project:
                 </p>
 
-                <div style={styles.linkBox}>
+                <div style={{...styles.linkBox, background: colors.background, border: `1px solid ${colors.border}`}}>
                   <code style={styles.linkText}>{inviteLink}</code>
-                  <button onClick={handleCopyLink} style={styles.copyLinkBtn} title="Copy link">
+                  <button onClick={handleCopyLink} style={{...styles.copyLinkBtn, border: `1px solid ${colors.border}`, color: colors.text}} title="Copy link">
                     {copied ? (
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
                         <path d="M20 6L9 17l-5-5"/>
@@ -1009,19 +1092,19 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
                   </button>
                 </div>
 
-                <div style={styles.divider}>
+                <div style={{...styles.divider, color: colors.textSecondary}}>
                   <span style={styles.dividerText}>OR</span>
                 </div>
 
                 <div style={styles.emailSection}>
-                  <label style={styles.emailLabel}>Send via email</label>
+                  <label style={{...styles.emailLabel, color: colors.text}}>Send via email</label>
                   <div style={styles.emailInputGroup}>
                     <input
                       type="email"
                       placeholder="colleague@company.com"
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
-                      style={styles.emailInput}
+                      style={{...styles.emailInput, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
                       onKeyPress={(e) => e.key === 'Enter' && handleSendEmail()}
                     />
                     <button 
@@ -1032,7 +1115,7 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
                       {sendingEmail ? 'Sending...' : 'Send'}
                     </button>
                   </div>
-                  <p style={styles.emailHint}>
+                  <p style={{...styles.emailHint, color: colors.textSecondary}}>
                     They'll receive an email with the invite link
                   </p>
                 </div>
@@ -1045,9 +1128,10 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
   );
 }
 
-function Dashboard({ project, onClose, token }) {
+function Dashboard({ project, onClose, token, colors }) {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expandedModal, setExpandedModal] = useState(null); // 'topics', 'decisions', 'blockers', 'actions'
 
   useEffect(() => {
     loadDashboard();
@@ -1061,6 +1145,7 @@ function Dashboard({ project, onClose, token }) {
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
+      console.log('Dashboard data received:', data);
       if (data.success) {
         setDashboard(data.dashboard);
       }
@@ -1130,22 +1215,27 @@ function Dashboard({ project, onClose, token }) {
   const maxCount = Math.max(...topTopics.map(t => t.count || 1), 1);
 
   return (
-    <div style={styles.dashboardPage}>
+    <div style={{...styles.dashboardPage, background: colors.background}}>
       {/* Header */}
-      <div style={styles.dashboardHeader}>
+      <div style={{...styles.dashboardHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
         <div style={styles.dashboardHeaderLeft}>
-          <button onClick={onClose} style={styles.dashboardBackBtn}>
+          <button onClick={onClose} style={{...styles.dashboardBackBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Back
           </button>
           <div>
-            <h1 style={styles.dashboardTitle}>Dashboard</h1>
-            <p style={styles.dashboardSubtitle}>{project.title}</p>
+            <h1 style={{...styles.dashboardTitle, color: colors.text}}>Dashboard</h1>
+            <p style={{...styles.dashboardSubtitle, color: colors.textSecondary}}>{project.title}</p>
+            {dashboard?.projectSummary && (
+              <p style={{...styles.dashboardSubtitle, color: colors.textSecondary, marginTop: '8px', fontStyle: 'italic'}}>
+                {dashboard.projectSummary}
+              </p>
+            )}
           </div>
         </div>
-        <button onClick={loadDashboard} style={styles.dashboardRefreshBtn} disabled={loading}>
+        <button onClick={loadDashboard} style={{...styles.dashboardRefreshBtn, background: '#8b5cf6', border: `1px solid ${colors.border}`, color: '#fff'}} disabled={loading}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
           </svg>
@@ -1161,22 +1251,22 @@ function Dashboard({ project, onClose, token }) {
       ) : dashboard ? (
         <div style={styles.dashboardContent}>
           {/* Project Health Bar */}
-          <div style={styles.healthBar}>
-            <div style={styles.healthCell}>
-              <div style={styles.healthLabel}>Stage</div>
-              <div style={{...styles.healthValue, color: getStageColor(project.stage)}}>
-                {project.stage.charAt(0).toUpperCase() + project.stage.slice(1)}
+          <div style={{...styles.healthBar, background: colors.border, border: `1px solid ${colors.border}`}}>
+            <div style={{...styles.healthCell, background: colors.surface}}>
+              <div style={{...styles.healthLabel, color: colors.textSecondary}}>Stage</div>
+              <div style={{...styles.healthValue, color: getStageColor(dashboard.stage || 'ideation')}}>
+                {(dashboard.stage || 'ideation').charAt(0).toUpperCase() + (dashboard.stage || 'ideation').slice(1)}
               </div>
             </div>
-            <div style={styles.healthCell}>
-              <div style={styles.healthLabel}>Momentum</div>
-              <div style={styles.healthValue}>{momentum} msg/disc</div>
+            <div style={{...styles.healthCell, background: colors.surface}}>
+              <div style={{...styles.healthLabel, color: colors.textSecondary}}>Momentum</div>
+              <div style={{...styles.healthValue, color: colors.text}}>{momentum} msg/disc</div>
             </div>
             <div style={{
               ...styles.healthCell,
-              background: validBlockers.length > 0 ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
+              background: validBlockers.length > 0 ? 'rgba(239, 68, 68, 0.05)' : colors.surface
             }}>
-              <div style={styles.healthLabel}>Open Blockers</div>
+              <div style={{...styles.healthLabel, color: colors.textSecondary}}>Open Blockers</div>
               <div style={{
                 ...styles.healthValue,
                 color: validBlockers.length > 0 ? '#ef4444' : '#10b981'
@@ -1184,13 +1274,13 @@ function Dashboard({ project, onClose, token }) {
                 {validBlockers.length}
               </div>
             </div>
-            <div style={styles.healthCell}>
-              <div style={styles.healthLabel}>Action Items</div>
-              <div style={styles.healthValue}>{dashboard.actionItems?.length || 0}</div>
+            <div style={{...styles.healthCell, background: colors.surface}}>
+              <div style={{...styles.healthLabel, color: colors.textSecondary}}>Action Items</div>
+              <div style={{...styles.healthValue, color: colors.text}}>{dashboard.actionItems?.length || 0}</div>
             </div>
-            <div style={styles.healthCell}>
-              <div style={styles.healthLabel}>Active Discussions</div>
-              <div style={styles.healthValue}>{dashboard.activeDiscussions}</div>
+            <div style={{...styles.healthCell, background: colors.surface}}>
+              <div style={{...styles.healthLabel, color: colors.textSecondary}}>Active Discussions</div>
+              <div style={{...styles.healthValue, color: colors.text}}>{dashboard.activeDiscussions}</div>
             </div>
           </div>
 
@@ -1199,82 +1289,110 @@ function Dashboard({ project, onClose, token }) {
             {/* Left Column - Intelligence */}
             <div style={styles.dashboardLeftCol}>
               {/* Topic Distribution */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Topic Distribution</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text}}>Topic Distribution</h3>
+                  {topTopics.length > 5 && (
+                    <button 
+                      onClick={() => setExpandedModal('topics')}
+                      style={{...styles.viewAllBtn, border: `1px solid ${colors.border}`, color: colors.textSecondary}}
+                    >
+                      View All ({topTopics.length})
+                    </button>
+                  )}
+                </div>
                 {topTopics.length > 0 ? (
                   <div style={styles.topicBars}>
-                    {topTopics.map((topic, i) => (
+                    {topTopics.slice(0, 5).map((topic, i) => (
                       <div key={i} style={styles.topicBarRow}>
-                        <div style={styles.topicName}>{topic.name || topic}</div>
-                        <div style={styles.topicBarContainer}>
+                        <div style={{...styles.topicName, color: colors.text}}>{topic.name || topic}</div>
+                        <div style={{...styles.topicBarContainer, background: colors.surfaceHover}}>
                           <div style={{
                             ...styles.topicBarFill,
                             width: `${((topic.count || 1) / maxCount) * 100}%`
                           }}></div>
                         </div>
-                        <div style={styles.topicCount}>{topic.count || 1}</div>
+                        <div style={{...styles.topicCount, color: colors.textSecondary}}>{topic.count || 1}</div>
                       </div>
                     ))}
-                    {remainingTopics > 0 && (
-                      <div style={styles.topicMore}>+{remainingTopics} more topics</div>
-                    )}
                   </div>
                 ) : (
-                  <div style={styles.emptyState}>No topics identified yet</div>
+                  <div style={{...styles.emptyState, color: colors.textSecondary}}>No topics identified yet</div>
                 )}
               </div>
 
               {/* Key Decisions */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Key Decisions</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text}}>Key Decisions</h3>
+                  {dashboard.decisions?.length > 5 && (
+                    <button 
+                      onClick={() => setExpandedModal('decisions')}
+                      style={{...styles.viewAllBtn, border: `1px solid ${colors.border}`, color: colors.textSecondary}}
+                    >
+                      View All ({dashboard.decisions.length})
+                    </button>
+                  )}
+                </div>
                 {dashboard.decisions?.length > 0 ? (
                   <div style={styles.timelineList}>
                     {dashboard.decisions.slice(0, 5).map((decision, i) => (
                       <div key={i} style={styles.timelineItem}>
                         <div style={styles.timelineDot}></div>
                         <div style={styles.timelineContent}>
-                          <div style={styles.timelineText}>{decision.text || decision}</div>
-                          <div style={styles.timelineMeta}>
-                            {decision.timestamp && formatTimestamp(decision.timestamp)}
-                            {decision.discussionId && ' • Main Discussion'}
-                          </div>
+                          <div style={{...styles.timelineText, color: colors.text}}>{decision.text || decision}</div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={styles.emptyState}>No decisions recorded yet</div>
+                  <div style={{...styles.emptyState, color: colors.textSecondary}}>No decisions recorded yet</div>
                 )}
               </div>
 
               {/* Blockers */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Blockers</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text}}>Blockers</h3>
+                  {validBlockers.length > 5 && (
+                    <button 
+                      onClick={() => setExpandedModal('blockers')}
+                      style={{...styles.viewAllBtn, border: `1px solid ${colors.border}`, color: colors.textSecondary}}
+                    >
+                      View All ({validBlockers.length})
+                    </button>
+                  )}
+                </div>
                 {validBlockers.length > 0 ? (
                   <div style={styles.blockersList}>
-                    {['high', 'medium', 'low'].map(severity => {
-                      const items = validBlockers.filter(b => 
-                        (b.severity || 'medium') === severity
-                      );
-                      return items.map((blocker, i) => (
-                        <div key={`${severity}-${i}`} style={styles.blockerItem}>
-                          <div style={{
-                            ...styles.severityDot,
-                            background: getSeverityColor(severity)
-                          }}></div>
-                          <div style={styles.blockerText}>{blocker.text || blocker}</div>
-                        </div>
-                      ));
-                    })}
+                    {validBlockers.slice(0, 5).map((blocker, i) => (
+                      <div key={i} style={styles.blockerItem}>
+                        <div style={{
+                          ...styles.severityDot,
+                          background: getSeverityColor(blocker.severity || 'medium')
+                        }}></div>
+                        <div style={{...styles.blockerText, color: colors.text}}>{blocker.text || blocker}</div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div style={styles.emptyState}>No blockers</div>
+                  <div style={{...styles.emptyState, color: colors.textSecondary}}>No blockers</div>
                 )}
               </div>
 
               {/* Action Items */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Action Items</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text}}>Action Items</h3>
+                  {dashboard.actionItems?.length > 5 && (
+                    <button 
+                      onClick={() => setExpandedModal('actions')}
+                      style={{...styles.viewAllBtn, border: `1px solid ${colors.border}`, color: colors.textSecondary}}
+                    >
+                      View All ({dashboard.actionItems.length})
+                    </button>
+                  )}
+                </div>
                 {dashboard.actionItems?.length > 0 ? (
                   <div style={styles.actionList}>
                     {dashboard.actionItems.slice(0, 5).map((action, i) => (
@@ -1284,23 +1402,12 @@ function Dashboard({ project, onClose, token }) {
                             {action.status === 'completed' && <polyline points="20 6 9 17 4 12"/>}
                           </svg>
                         </div>
-                        <div style={styles.actionText}>{action.text || action}</div>
-                        <div style={{
-                          ...styles.statusBadge,
-                          background: action.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' :
-                                     action.status === 'in-progress' ? 'rgba(59, 130, 246, 0.1)' :
-                                     'rgba(107, 114, 128, 0.1)',
-                          color: action.status === 'completed' ? '#10b981' :
-                                 action.status === 'in-progress' ? '#3b82f6' :
-                                 '#6b7280'
-                        }}>
-                          {action.status || 'open'}
-                        </div>
+                        <div style={{...styles.actionText, color: colors.text}}>{action.text || action}</div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={styles.emptyState}>No action items</div>
+                  <div style={{...styles.emptyState, color: colors.textSecondary}}>No action items</div>
                 )}
               </div>
             </div>
@@ -1308,17 +1415,17 @@ function Dashboard({ project, onClose, token }) {
             {/* Right Column - Project State */}
             <div style={styles.dashboardRightCol}>
               {/* Stage Panel */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Current Stage</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Current Stage</h3>
                 <div style={styles.stageDisplay}>
                   <div style={{
                     ...styles.stageBadge,
-                    background: getStageColor(project.stage)
+                    background: getStageColor(dashboard.stage || 'ideation')
                   }}>
-                    {project.stage.charAt(0).toUpperCase() + project.stage.slice(1)}
+                    {(dashboard.stage || 'ideation').charAt(0).toUpperCase() + (dashboard.stage || 'ideation').slice(1)}
                   </div>
                   {dashboard.lastUpdated && (
-                    <div style={styles.stageUpdated}>
+                    <div style={{...styles.stageUpdated, color: colors.textSecondary}}>
                       Last updated {formatTimestamp(dashboard.lastUpdated)}
                     </div>
                   )}
@@ -1326,43 +1433,139 @@ function Dashboard({ project, onClose, token }) {
               </div>
 
               {/* Activity Graph */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Activity</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Activity</h3>
                 <div style={styles.activityChartCompact}>
                   <div style={styles.chartBarsCompact}>
-                    {[12, 25, 18, 32, 28, 40, 35].map((value, i) => (
-                      <div key={i} style={styles.chartBarWrapperCompact}>
-                        <div style={styles.chartBarCompact}>
-                          <div style={{
-                            ...styles.chartBarFillCompact,
-                            height: `${(value / 40) * 100}%`,
-                            background: i === 6 ? '#667eea' : 'rgba(102, 126, 234, 0.3)'
-                          }}></div>
+                    {(dashboard.activity || [0,0,0,0,0,0,0]).map((value, i) => {
+                      const maxActivity = Math.max(...(dashboard.activity || [1]), 1);
+                      return (
+                        <div key={i} style={styles.chartBarWrapperCompact}>
+                          <div style={styles.chartBarCompact}>
+                            <div style={{
+                              ...styles.chartBarFillCompact,
+                              height: `${(value / maxActivity) * 100}%`,
+                              background: i === 6 ? '#667eea' : 'rgba(102, 126, 234, 0.3)'
+                            }}></div>
+                          </div>
+                          <div style={{...styles.chartBarLabelCompact, color: colors.textSecondary}}>
+                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
+                          </div>
                         </div>
-                        <div style={styles.chartBarLabelCompact}>
-                          {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
+              {/* Discussion Breakdown */}
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Discussion Activity</h3>
+                {dashboard.discussionBreakdown?.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {dashboard.discussionBreakdown.map((disc, i) => {
+                      const maxCount = Math.max(...dashboard.discussionBreakdown.map(d => d.count), 1);
+                      const percentage = Math.round((disc.count / dashboard.totalMessages) * 100);
+                      return (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ 
+                              fontSize: '13px', 
+                              color: colors.text,
+                              fontWeight: '500',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '200px'
+                            }}>
+                              {disc.title}
+                            </div>
+                            <div style={{ fontSize: '12px', color: colors.textSecondary }}>
+                              {disc.count} ({percentage}%)
+                            </div>
+                          </div>
+                          <div style={{ 
+                            height: '6px', 
+                            background: colors.surfaceHover, 
+                            borderRadius: '3px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${(disc.count / maxCount) * 100}%`,
+                              background: disc.isMain ? '#10b981' : '#667eea',
+                              borderRadius: '3px',
+                              transition: 'width 0.3s'
+                            }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No discussion data</div>
+                )}
+              </div>
+
+              {/* Message Types Distribution */}
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Message Distribution</h3>
+                {dashboard.messageTypes ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {/* Simple pie chart representation */}
+                      <div style={{ 
+                        width: '80px', 
+                        height: '80px', 
+                        borderRadius: '50%',
+                        background: `conic-gradient(
+                          #667eea 0deg ${(dashboard.messageTypes.user / dashboard.totalMessages) * 360}deg,
+                          #8b5cf6 ${(dashboard.messageTypes.user / dashboard.totalMessages) * 360}deg 360deg
+                        )`,
+                        flexShrink: 0
+                      }}></div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#667eea' }}></div>
+                          <span style={{ fontSize: '13px', color: colors.text }}>User Messages</span>
+                          <span style={{ fontSize: '13px', color: colors.textSecondary, marginLeft: 'auto' }}>
+                            {dashboard.messageTypes.user} ({Math.round((dashboard.messageTypes.user / dashboard.totalMessages) * 100)}%)
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#8b5cf6' }}></div>
+                          <span style={{ fontSize: '13px', color: colors.text }}>AI Responses</span>
+                          <span style={{ fontSize: '13px', color: colors.textSecondary, marginLeft: 'auto' }}>
+                            {dashboard.messageTypes.ai} ({Math.round((dashboard.messageTypes.ai / dashboard.totalMessages) * 100)}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No message data</div>
+                )}
+              </div>
+
               {/* Participants */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Participants</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Top Contributors</h3>
                 <div style={styles.participantsListCompact}>
-                  {project.members?.slice(0, 5).map((member, i) => {
-                    const username = member.userId?.username || 'Unknown';
-                    const timeAgo = ['5m ago', '10m ago', '25m ago', '1h ago', '2h ago'][i];
+                  {dashboard.participants?.map((participant, i) => {
+                    const avatarColor = getAvatarColor(participant.username);
+                    const initials = getInitials(participant.username);
+                    const percentage = Math.round((participant.count / dashboard.totalMessages) * 100);
                     return (
                       <div key={i} style={styles.participantItemCompact}>
-                        <div style={styles.participantAvatarCompact}>
-                          {username.charAt(0).toUpperCase()}
+                        <div style={{
+                          ...styles.participantAvatarCompact,
+                          background: avatarColor
+                        }}>
+                          {initials}
                         </div>
                         <div style={styles.participantInfoCompact}>
-                          <div style={styles.participantNameCompact}>{username}</div>
-                          <div style={styles.participantTimeCompact}>{timeAgo}</div>
+                          <div style={{...styles.participantNameCompact, color: colors.text}}>{participant.username}</div>
+                          <div style={{...styles.participantTimeCompact, color: colors.textSecondary}}>{participant.count} messages ({percentage}%)</div>
                         </div>
                       </div>
                     );
@@ -1371,19 +1574,19 @@ function Dashboard({ project, onClose, token }) {
               </div>
 
               {/* Stats Summary */}
-              <div style={styles.dashboardCard}>
-                <h3 style={styles.cardTitleNew}>Summary</h3>
+              <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.cardTitleNew, color: colors.text}}>Summary</h3>
                 <div style={styles.statsSummary}>
                   <div style={styles.summaryRow}>
-                    <span style={styles.summaryLabel}>Total Messages</span>
-                    <span style={styles.summaryValue}>{dashboard.totalMessages}</span>
+                    <span style={{...styles.summaryLabel, color: colors.textSecondary}}>Total Messages</span>
+                    <span style={{...styles.summaryValue, color: colors.text}}>{dashboard.totalMessages}</span>
                   </div>
                   <div style={styles.summaryRow}>
-                    <span style={styles.summaryLabel}>Documents</span>
-                    <span style={styles.summaryValue}>{dashboard.documentCount}</span>
+                    <span style={{...styles.summaryLabel, color: colors.textSecondary}}>Documents</span>
+                    <span style={{...styles.summaryValue, color: colors.text}}>{dashboard.documentCount}</span>
                   </div>
                   <div style={styles.summaryRow}>
-                    <span style={styles.summaryLabel}>Data Source</span>
+                    <span style={{...styles.summaryLabel, color: colors.textSecondary}}>Data Source</span>
                     <span style={{
                       ...styles.summaryValue,
                       color: dashboard.source === 'persistent' ? '#10b981' : '#f59e0b'
@@ -1407,11 +1610,67 @@ function Dashboard({ project, onClose, token }) {
           <button onClick={loadDashboard} style={styles.retryBtn}>Retry</button>
         </div>
       )}
+
+      {/* Expanded Modals */}
+      {expandedModal && dashboard && (
+        <div style={styles.modalOverlay} onClick={() => setExpandedModal(null)}>
+          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`, maxWidth: '600px', maxHeight: '80vh', overflow: 'auto'}} onClick={(e) => e.stopPropagation()}>
+            <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+              <h3 style={{...styles.modalTitle, color: colors.text}}>
+                {expandedModal === 'topics' && 'All Topics'}
+                {expandedModal === 'decisions' && 'All Decisions'}
+                {expandedModal === 'blockers' && 'All Blockers'}
+                {expandedModal === 'actions' && 'All Action Items'}
+              </h3>
+              <button onClick={() => setExpandedModal(null)} style={{...styles.modalClose, color: colors.textTertiary}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              {expandedModal === 'topics' && topTopics.map((topic, i) => (
+                <div key={i} style={{...styles.topicBarRow, marginBottom: '12px'}}>
+                  <div style={{...styles.topicName, color: colors.text}}>{topic.name || topic}</div>
+                  <div style={{...styles.topicBarContainer, background: colors.surfaceHover}}>
+                    <div style={{...styles.topicBarFill, width: `${((topic.count || 1) / maxCount) * 100}%`}}></div>
+                  </div>
+                  <div style={{...styles.topicCount, color: colors.textSecondary}}>{topic.count || 1}</div>
+                </div>
+              ))}
+              {expandedModal === 'decisions' && dashboard.decisions.map((decision, i) => (
+                <div key={i} style={{...styles.timelineItem, marginBottom: '16px'}}>
+                  <div style={styles.timelineDot}></div>
+                  <div style={styles.timelineContent}>
+                    <div style={{...styles.timelineText, color: colors.text}}>{decision.text || decision}</div>
+                  </div>
+                </div>
+              ))}
+              {expandedModal === 'blockers' && validBlockers.map((blocker, i) => (
+                <div key={i} style={{...styles.blockerItem, marginBottom: '12px'}}>
+                  <div style={{...styles.severityDot, background: getSeverityColor(blocker.severity || 'medium')}}></div>
+                  <div style={{...styles.blockerText, color: colors.text}}>{blocker.text || blocker}</div>
+                </div>
+              ))}
+              {expandedModal === 'actions' && dashboard.actionItems.map((action, i) => (
+                <div key={i} style={{...styles.actionItem, marginBottom: '12px'}}>
+                  <div style={styles.actionCheckbox}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      {action.status === 'completed' && <polyline points="20 6 9 17 4 12"/>}
+                    </svg>
+                  </div>
+                  <div style={{...styles.actionText, color: colors.text}}>{action.text || action}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Documents({ project, onClose, token }) {
+function Documents({ project, onClose, token, colors }) {
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -1486,15 +1745,15 @@ function Documents({ project, onClose, token }) {
   };
 
   return (
-    <div style={styles.fullPage}>
-      <div style={styles.pageHeader}>
-        <button onClick={onClose} style={styles.backButton}>
+    <div style={{...styles.fullPage, background: colors.background}}>
+      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+        <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
           Back
         </button>
-        <h1 style={styles.pageTitle}>Documents</h1>
+        <h1 style={{...styles.pageTitle, color: colors.text}}>Documents</h1>
         <label htmlFor="file-upload" style={styles.uploadButton}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
@@ -1514,8 +1773,8 @@ function Documents({ project, onClose, token }) {
       <div style={styles.pageContent}>
         {documents.length === 0 ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No documents uploaded yet</p>
-            <p style={styles.emptyHint}>Upload .txt or .md files to provide context for AI</p>
+            <p style={{...styles.emptyText, color: colors.textSecondary}}>No documents uploaded yet</p>
+            <p style={{...styles.emptyHint, color: colors.textTertiary}}>Upload .txt or .md files to provide context for AI</p>
           </div>
         ) : (
           <div style={styles.documentsList}>
@@ -1524,13 +1783,13 @@ function Documents({ project, onClose, token }) {
               const hasEmbeddings = doc.chunks && doc.chunks.length > 0;
               
               return (
-                <div key={doc._id} style={styles.documentCard}>
+                <div key={doc._id} style={{...styles.documentCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
                   </svg>
                   <div style={styles.documentInfo}>
-                    <div style={styles.documentName}>{doc.title}</div>
-                    <div style={styles.documentMeta}>
+                    <div style={{...styles.documentName, color: colors.text}}>{doc.title}</div>
+                    <div style={{...styles.documentMeta, color: colors.textSecondary}}>
                       {contentSize} KB • Uploaded {new Date(doc.createdAt).toLocaleDateString()}
                     </div>
                     <div style={{
@@ -1552,7 +1811,7 @@ function Documents({ project, onClose, token }) {
   );
 }
 
-function Settings({ project, onClose, token, isOwner }) {
+function Settings({ project, onClose, token, isOwner, colors }) {
   const [copied, setCopied] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -1604,10 +1863,10 @@ function Settings({ project, onClose, token, isOwner }) {
 
   return (
     <div style={styles.settingsOverlay}>
-      <div style={styles.settingsModal}>
-        <div style={styles.settingsHeader}>
-          <h2 style={styles.settingsTitle}>Project Settings</h2>
-          <button onClick={onClose} style={styles.settingsClose}>
+      <div style={{...styles.settingsModal, background: colors.surface, border: `1px solid ${colors.border}`}}>
+        <div style={{...styles.settingsHeader, borderBottom: `1px solid ${colors.border}`}}>
+          <h2 style={{...styles.settingsTitle, color: colors.text}}>Project Settings</h2>
+          <button onClick={onClose} style={{...styles.settingsClose, color: colors.textSecondary}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -1616,18 +1875,18 @@ function Settings({ project, onClose, token, isOwner }) {
 
         <div style={styles.settingsBody}>
           <div style={styles.settingSection}>
-            <h3 style={styles.sectionTitle}>Project Information</h3>
+            <h3 style={{...styles.sectionTitle, color: colors.text}}>Project Information</h3>
             <div style={styles.infoRow}>
-              <span style={styles.infoLabel}>Title:</span>
-              <span style={styles.infoValue}>{project.title}</span>
+              <span style={{...styles.infoLabel, color: colors.textSecondary}}>Title:</span>
+              <span style={{...styles.infoValue, color: colors.text}}>{project.title}</span>
             </div>
           </div>
 
           <div style={styles.settingSection}>
-            <h3 style={styles.sectionTitle}>Invite Link</h3>
-            <p style={styles.sectionDesc}>Share this link with team members</p>
+            <h3 style={{...styles.sectionTitle, color: colors.text}}>Invite Link</h3>
+            <p style={{...styles.sectionDesc, color: colors.textSecondary}}>Share this link with team members</p>
             <div style={styles.codeBox}>
-              <code style={styles.code}>{`${window.location.origin}/join/${project.inviteCode}`}</code>
+              <code style={{...styles.code, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}>{`${window.location.origin}/join/${project.inviteCode}`}</code>
               <button onClick={copyInviteCode} style={styles.copyBtn}>
                 {copied ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1641,8 +1900,8 @@ function Settings({ project, onClose, token, isOwner }) {
               </button>
             </div>
             
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #2d2d2d' }}>
-              <p style={{ fontSize: '14px', color: '#b4b4b4', marginBottom: '12px' }}>
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${colors.border}` }}>
+              <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
                 Or send invitation via email:
               </p>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1654,10 +1913,10 @@ function Settings({ project, onClose, token, isOwner }) {
                   style={{
                     flex: 1,
                     padding: '10px 12px',
-                    background: '#0d0d0d',
-                    border: '1px solid #2d2d2d',
+                    background: colors.background,
+                    border: `1px solid ${colors.border}`,
                     borderRadius: '6px',
-                    color: '#ececec',
+                    color: colors.text,
                     fontSize: '14px',
                     outline: 'none',
                     fontFamily: 'inherit'
@@ -1686,19 +1945,24 @@ function Settings({ project, onClose, token, isOwner }) {
           </div>
 
           <div style={styles.settingSection}>
-            <h3 style={styles.sectionTitle}>Members ({members.length})</h3>
+            <h3 style={{...styles.sectionTitle, color: colors.text}}>Members ({members.length})</h3>
             <div style={styles.membersList}>
               {members.map((member, i) => {
                 const username = member.userId?.username || 'Unknown';
                 const role = member.role || 'member';
+                const avatarColor = getAvatarColor(username);
+                const initials = getInitials(username);
                 return (
-                  <div key={i} style={styles.memberItem}>
-                    <div style={styles.memberAvatar}>
-                      {username.charAt(0).toUpperCase()}
+                  <div key={i} style={{...styles.memberItem, background: colors.surface, border: `1px solid ${colors.border}`}}>
+                    <div style={{
+                      ...styles.memberAvatar,
+                      background: avatarColor
+                    }}>
+                      {initials}
                     </div>
                     <div style={styles.memberInfo}>
-                      <div style={styles.memberName}>{username}</div>
-                      <div style={styles.memberRole}>{role}</div>
+                      <div style={{...styles.memberName, color: colors.text}}>{username}</div>
+                      <div style={{...styles.memberRole, color: colors.textSecondary}}>{role === 'owner' ? 'Owner' : 'Member'}</div>
                     </div>
                   </div>
                 );
@@ -1711,7 +1975,7 @@ function Settings({ project, onClose, token, isOwner }) {
   );
 }
 
-function Summaries({ project, discussion, onClose, token }) {
+function Summaries({ project, discussion, onClose, token, colors }) {
   const [summaries, setSummaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1822,15 +2086,15 @@ function Summaries({ project, discussion, onClose, token }) {
   };
 
   return (
-    <div style={styles.fullPage}>
-      <div style={styles.pageHeader}>
-        <button onClick={onClose} style={styles.backButton}>
+    <div style={{...styles.fullPage, background: colors.background}}>
+      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+        <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
           Back
         </button>
-        <h1 style={styles.pageTitle}>Summaries - {discussion.title}</h1>
+        <h1 style={{...styles.pageTitle, color: colors.text}}>Summaries - {discussion.title}</h1>
         <button 
           onClick={() => generateSummary()} 
           style={styles.uploadButton}
@@ -1846,30 +2110,30 @@ function Summaries({ project, discussion, onClose, token }) {
       <div style={styles.pageContent}>
         {loading ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>Loading summaries...</p>
+            <p style={{...styles.emptyText, color: colors.textSecondary}}>Loading summaries...</p>
           </div>
         ) : summaries.length === 0 ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No summaries yet</p>
-            <p style={styles.emptyHint}>Generate a summary to capture key points from this discussion</p>
+            <p style={{...styles.emptyText, color: colors.textSecondary}}>No summaries yet</p>
+            <p style={{...styles.emptyHint, color: colors.textTertiary}}>Generate a summary to capture key points from this discussion</p>
           </div>
         ) : (
           <div style={styles.summariesList}>
             {summaries.map(summary => (
-              <div key={summary._id} style={styles.summaryCard}>
+              <div key={summary._id} style={{...styles.summaryCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
                 <div style={styles.summaryHeader}>
                   <div style={styles.summaryMeta}>
-                    <span style={styles.summaryDate}>
+                    <span style={{...styles.summaryDate, color: colors.text}}>
                       {new Date(summary.createdAt).toLocaleDateString()}
                     </span>
-                    <span style={styles.summaryProvider}>
+                    <span style={{...styles.summaryProvider, color: colors.textSecondary}}>
                       via {summary.generatedBy}
                     </span>
                   </div>
                   <div style={styles.summaryActions}>
                     <button 
                       onClick={() => setEditingSummary(summary._id)}
-                      style={styles.summaryActionBtn}
+                      style={{...styles.summaryActionBtn, color: colors.text}}
                       title="Refine summary"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1889,7 +2153,7 @@ function Summaries({ project, discussion, onClose, token }) {
                   </div>
                 </div>
                 
-                <div style={styles.summaryContent}>
+                <div style={{...styles.summaryContent, color: colors.text}}>
                   {summary.content}
                 </div>
 
@@ -1935,7 +2199,6 @@ const styles = {
   container: {
     display: 'flex',
     height: '100vh',
-    background: '#0d0d0d',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   iconBar: {
@@ -2510,22 +2773,23 @@ const styles = {
   memberItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
-    background: '#40414f',
-    borderRadius: '8px'
+    gap: '16px',
+    padding: '16px',
+    background: '#0d0d0d',
+    borderRadius: '8px',
+    border: '1px solid #2d2d2d'
   },
   memberAvatar: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '2px',
-    background: '#5436da',
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: '#fff',
-    fontSize: '16px',
-    fontWeight: '600'
+    fontSize: '14px',
+    fontWeight: '600',
+    flexShrink: 0
   },
   memberInfo: {
     flex: 1
@@ -2960,24 +3224,22 @@ const styles = {
   memberItem: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '12px',
-    borderRadius: '8px',
-    marginBottom: '8px',
-    background: '#0d0d0d',
-    border: '1px solid #2d2d2d'
+    gap: '16px',
+    padding: '16px',
+    background: '#40414f',
+    borderRadius: '8px'
   },
   memberAvatar: {
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     borderRadius: '50%',
-    background: '#8b5cf6',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: '#fff',
     fontSize: '14px',
-    fontWeight: '600'
+    fontWeight: '600',
+    flexShrink: 0
   },
   addBtn: {
     padding: '8px 16px',
@@ -3643,6 +3905,17 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     fontFamily: 'inherit'
+  },
+  viewAllBtn: {
+    padding: '6px 12px',
+    background: 'transparent',
+    border: '1px solid #3d3d3d',
+    borderRadius: '6px',
+    color: '#8e8ea0',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
   },
   // New Dashboard Redesign Styles
   healthBar: {

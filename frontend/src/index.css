@@ -10,8 +10,6 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0d0d0d;
-  color: #ececec;
 }
 
 code {
@@ -92,6 +90,7 @@ textarea:focus-visible {
 /* Markdown styles */
 .markdown-content {
   line-height: 1.7;
+  color: inherit;
 }
 
 .markdown-content p {
@@ -99,20 +98,20 @@ textarea:focus-visible {
 }
 
 .markdown-content code {
-  background: #1a1a1a;
+  background: var(--surface-color, #1a1a1a);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--border-color, #2d2d2d);
 }
 
 .markdown-content pre {
-  background: #1a1a1a;
+  background: var(--surface-color, #1a1a1a);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
   margin: 1em 0;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--border-color, #2d2d2d);
 }
 
 .markdown-content pre code {
@@ -146,10 +145,10 @@ textarea:focus-visible {
 }
 
 .markdown-content blockquote {
-  border-left: 3px solid #3d3d3d;
+  border-left: 3px solid var(--border-color, #3d3d3d);
   padding-left: 1em;
   margin: 1em 0;
-  color: #b4b4b4;
+  color: var(--text-secondary, #b4b4b4);
 }
 
 .markdown-content table {
@@ -160,13 +159,13 @@ textarea:focus-visible {
 
 .markdown-content th,
 .markdown-content td {
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--border-color, #2d2d2d);
   padding: 8px 12px;
   text-align: left;
 }
 
 .markdown-content th {
-  background: #1a1a1a;
+  background: var(--surface-color, #1a1a1a);
   font-weight: 600;
 }
 

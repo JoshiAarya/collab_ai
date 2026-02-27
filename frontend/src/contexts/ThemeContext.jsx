@@ -79,7 +79,10 @@ export function ThemeProvider({ children }) {
       <div style={{
         background: currentTheme.colors.background,
         color: currentTheme.colors.text,
-        minHeight: '100vh'
+        minHeight: '100vh',
+        '--surface-color': currentTheme.colors.surface,
+        '--border-color': currentTheme.colors.border,
+        '--text-secondary': currentTheme.colors.textSecondary
       }}>
         {children}
       </div>

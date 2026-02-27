@@ -55,7 +55,7 @@ export default function Sidebar({ children, footerContent, iconBarContent, onTog
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
                 style={styles.userSection}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#1a1a1a'}
+                onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <div style={{

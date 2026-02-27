@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
 import apiRequest from '../utils/api.js';
@@ -10,6 +11,7 @@ export default function ProjectList({ onSelectProject }) {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { token, user, logout } = useAuth();
+  const { colors } = useTheme();
 
   useEffect(() => {
     loadProjects();
@@ -30,7 +32,7 @@ export default function ProjectList({ onSelectProject }) {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{...styles.container, background: colors.background}}>
       {/* Sidebar */}
       <Sidebar 
         isOpen={sidebarOpen} 
@@ -58,7 +60,7 @@ export default function ProjectList({ onSelectProject }) {
           </>
         }
         footerContent={
-          <button onClick={() => setShowJoinModal(true)} style={styles.footerBtn}>
+          <button onClick={() => setShowJoinModal(true)} style={{...styles.footerBtn, color: colors.text}}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="8.5" cy="7" r="4"/>
@@ -69,8 +71,8 @@ export default function ProjectList({ onSelectProject }) {
           </button>
         }
       >
-        <div style={styles.sidebarHeader}>
-          <button onClick={() => setShowCreateModal(true)} style={styles.newProjectBtn}>
+        <div style={{...styles.sidebarHeader, borderBottom: `1px solid ${colors.border}`}}>
+          <button onClick={() => setShowCreateModal(true)} style={{...styles.newProjectBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -83,7 +85,7 @@ export default function ProjectList({ onSelectProject }) {
             <div
               key={project._id}
               onClick={() => onSelectProject(project)}
-              style={styles.projectItem}
+              style={{...styles.projectItem, color: colors.text}}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -98,20 +100,20 @@ export default function ProjectList({ onSelectProject }) {
       <div style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
 
         <div style={styles.emptyState}>
-          <div style={styles.emptyIcon}>
+          <div style={{...styles.emptyIcon, color: colors.textTertiary}}>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
           </div>
-          <h2 style={styles.emptyTitle}>CollabAI Workspace</h2>
-          <p style={styles.emptyText}>
+          <h2 style={{...styles.emptyTitle, color: colors.text}}>CollabAI Workspace</h2>
+          <p style={{...styles.emptyText, color: colors.textSecondary}}>
             Create a project to start collaborating with your team and AI
           </p>
           <div style={styles.emptyActions}>
             <button onClick={() => setShowCreateModal(true)} style={styles.primaryBtn}>
               Create new project
             </button>
-            <button onClick={() => setShowJoinModal(true)} style={styles.secondaryBtn}>
+            <button onClick={() => setShowJoinModal(true)} style={{...styles.secondaryBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
               Join existing project
             </button>
           </div>
@@ -122,6 +124,7 @@ export default function ProjectList({ onSelectProject }) {
       {showCreateModal && (
         <CreateProjectModal 
           token={token}
+          colors={colors}
           onClose={() => setShowCreateModal(false)}
           onCreated={(project) => {
             setShowCreateModal(false);
@@ -134,6 +137,7 @@ export default function ProjectList({ onSelectProject }) {
       {showJoinModal && (
         <JoinProjectModal 
           token={token}
+          colors={colors}
           onClose={() => setShowJoinModal(false)}
           onJoined={() => {
             setShowJoinModal(false);
@@ -145,7 +149,7 @@ export default function ProjectList({ onSelectProject }) {
   );
 }
 
-function CreateProjectModal({ token, onClose, onCreated }) {
+function CreateProjectModal({ token, colors, onClose, onCreated }) {
   const [title, setTitle] = useState('');
   const [problemStatement, setProblemStatement] = useState('');
   const [loading, setLoading] = useState(false);
@@ -222,12 +226,12 @@ function CreateProjectModal({ token, onClose, onCreated }) {
 
   return (
     <div style={styles.modalOverlay} onClick={createdProject ? null : onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
         {!createdProject ? (
           <>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Create new project</h2>
-              <button onClick={onClose} style={styles.modalClose}>
+            <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+              <h2 style={{...styles.modalTitle, color: colors.text}}>Create new project</h2>
+              <button onClick={onClose} style={{...styles.modalClose, color: colors.textTertiary}}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -236,31 +240,31 @@ function CreateProjectModal({ token, onClose, onCreated }) {
             
             <form onSubmit={handleSubmit} style={styles.modalForm}>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Project title</label>
+                <label style={{...styles.label, color: colors.text}}>Project title</label>
                 <input
                   type="text"
                   placeholder="e.g., Product Launch Planning"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  style={styles.input}
+                  style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
                   required
                   autoFocus
                 />
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>Problem statement</label>
+                <label style={{...styles.label, color: colors.text}}>Problem statement</label>
                 <textarea
                   placeholder="Describe what you're trying to solve..."
                   value={problemStatement}
                   onChange={(e) => setProblemStatement(e.target.value)}
-                  style={{...styles.input, minHeight: '120px', resize: 'vertical'}}
+                  style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text, minHeight: '120px', resize: 'vertical'}}
                   required
                 />
               </div>
 
               <div style={styles.modalActions}>
-                <button type="button" onClick={onClose} style={styles.cancelBtn}>
+                <button type="button" onClick={onClose} style={{...styles.cancelBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
                   Cancel
                 </button>
                 <button type="submit" style={styles.submitBtn} disabled={loading}>
@@ -271,23 +275,23 @@ function CreateProjectModal({ token, onClose, onCreated }) {
           </>
         ) : (
           <>
-            <div style={styles.modalHeader}>
+            <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
               <div style={styles.successIcon}>✓</div>
-              <h2 style={styles.modalTitle}>Project Created!</h2>
+              <h2 style={{...styles.modalTitle, color: colors.text}}>Project Created!</h2>
             </div>
             
             <div style={styles.modalForm}>
-              <p style={styles.successMessage}>
+              <p style={{...styles.successMessage, color: colors.text}}>
                 Your project "{createdProject.title}" has been created successfully.
               </p>
 
-              <div style={styles.inviteSection}>
-                <h3 style={styles.inviteTitle}>Invite Team Members</h3>
-                <p style={styles.inviteDesc}>
+              <div style={{...styles.inviteSection, background: colors.background, border: `1px solid ${colors.border}`}}>
+                <h3 style={{...styles.inviteTitle, color: colors.text}}>Invite Team Members</h3>
+                <p style={{...styles.inviteDesc, color: colors.textSecondary}}>
                   Share this link with your team members to collaborate:
                 </p>
                 
-                <div style={styles.inviteCodeBox}>
+                <div style={{...styles.inviteCodeBox, background: colors.background, border: `1px solid ${colors.border}`}}>
                   <code style={styles.inviteCode}>
                     {window.location.origin}/join/{createdProject.inviteCode}
                   </code>
@@ -297,7 +301,7 @@ function CreateProjectModal({ token, onClose, onCreated }) {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    style={styles.copyBtn}
+                    style={{...styles.copyBtn, border: `1px solid ${colors.border}`, color: colors.text}}
                     title="Copy invite link"
                   >
                     {copied ? (
@@ -313,16 +317,16 @@ function CreateProjectModal({ token, onClose, onCreated }) {
                   </button>
                 </div>
 
-                <div style={styles.inviteHint}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8ea0" strokeWidth="2">
+                <div style={{...styles.inviteHint, color: colors.textTertiary}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 16v-4M12 8h.01"/>
                   </svg>
                   <span>Anyone with this link can join your project</span>
                 </div>
 
-                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #2d2d2d' }}>
-                  <p style={{ fontSize: '14px', color: '#b4b4b4', marginBottom: '12px' }}>
+                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${colors.border}` }}>
+                  <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
                     Or send invitation via email:
                   </p>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -333,6 +337,9 @@ function CreateProjectModal({ token, onClose, onCreated }) {
                       onChange={(e) => setEmailInput(e.target.value)}
                       style={{
                         ...styles.input,
+                        background: colors.background,
+                        border: `1px solid ${colors.border}`,
+                        color: colors.text,
                         flex: 1,
                         marginBottom: 0
                       }}
@@ -365,7 +372,7 @@ function CreateProjectModal({ token, onClose, onCreated }) {
   );
 }
 
-function JoinProjectModal({ token, onClose, onJoined }) {
+function JoinProjectModal({ token, colors, onClose, onJoined }) {
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -413,6 +420,8 @@ function JoinProjectModal({ token, onClose, onJoined }) {
       <div style={styles.modalOverlay} onClick={handleSuccess}>
         <div style={{
           ...styles.modal,
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
           textAlign: 'center',
           padding: '40px'
         }} onClick={(e) => e.stopPropagation()}>
@@ -433,10 +442,10 @@ function JoinProjectModal({ token, onClose, onJoined }) {
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
           </div>
-          <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#ececec', marginBottom: '12px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '600', color: colors.text, marginBottom: '12px' }}>
             Welcome to the Team!
           </h2>
-          <p style={{ fontSize: '16px', color: '#b4b4b4', lineHeight: '1.6', marginBottom: '32px' }}>
+          <p style={{ fontSize: '16px', color: colors.textSecondary, lineHeight: '1.6', marginBottom: '32px' }}>
             You've successfully joined "{joinedProject.title}". Start collaborating with your team now!
           </p>
           <button onClick={handleSuccess} style={{
@@ -453,10 +462,10 @@ function JoinProjectModal({ token, onClose, onJoined }) {
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>Join project</h2>
-          <button onClick={onClose} style={styles.modalClose}>
+      <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
+        <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
+          <h2 style={{...styles.modalTitle, color: colors.text}}>Join project</h2>
+          <button onClick={onClose} style={{...styles.modalClose, color: colors.textTertiary}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -465,13 +474,13 @@ function JoinProjectModal({ token, onClose, onJoined }) {
         
         <form onSubmit={handleSubmit} style={styles.modalForm}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Invite code</label>
+            <label style={{...styles.label, color: colors.text}}>Invite code</label>
             <input
               type="text"
               placeholder="Enter 8-character code"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
-              style={styles.input}
+              style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
               required
               autoFocus
               maxLength={8}
@@ -481,7 +490,7 @@ function JoinProjectModal({ token, onClose, onJoined }) {
           {error && <div style={styles.error}>{error}</div>}
 
           <div style={styles.modalActions}>
-            <button type="button" onClick={onClose} style={styles.cancelBtn}>
+            <button type="button" onClick={onClose} style={{...styles.cancelBtn, border: `1px solid ${colors.border}`, color: colors.text}}>
               Cancel
             </button>
             <button type="submit" style={styles.submitBtn} disabled={loading}>
@@ -498,7 +507,6 @@ const styles = {
   container: {
     display: 'flex',
     height: '100vh',
-    background: '#0d0d0d',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   iconBar: {
@@ -553,8 +561,7 @@ const styles = {
     borderRight: '1px solid #2d2d2d'
   },
   sidebarHeader: {
-    padding: '12px',
-    borderBottom: '1px solid #2d2d2d'
+    padding: '12px'
   },
   newProjectBtn: {
     display: 'flex',
@@ -563,9 +570,7 @@ const styles = {
     width: '100%',
     padding: '10px 12px',
     background: 'transparent',
-    border: '1px solid #2d2d2d',
     borderRadius: '6px',
-    color: '#ececec',
     fontSize: '14px',
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -584,7 +589,6 @@ const styles = {
     borderRadius: '6px',
     cursor: 'pointer',
     transition: 'background 0.2s',
-    color: '#ececec',
     fontSize: '14px',
     marginBottom: '2px'
   },
@@ -607,7 +611,6 @@ const styles = {
     background: 'transparent',
     border: 'none',
     borderRadius: '8px',
-    color: '#ececec',
     fontSize: '14px',
     cursor: 'pointer',
     width: '100%',
@@ -702,18 +705,15 @@ const styles = {
     padding: '40px'
   },
   emptyIcon: {
-    color: '#3d3d3d',
     marginBottom: '24px'
   },
   emptyTitle: {
     fontSize: '32px',
     fontWeight: '600',
-    marginBottom: '16px',
-    color: '#ececec'
+    marginBottom: '16px'
   },
   emptyText: {
     fontSize: '16px',
-    color: '#b4b4b4',
     marginBottom: '32px',
     lineHeight: '1.6'
   },
@@ -737,9 +737,7 @@ const styles = {
   secondaryBtn: {
     padding: '12px 24px',
     background: 'transparent',
-    border: '1px solid #2d2d2d',
     borderRadius: '8px',
-    color: '#ececec',
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
@@ -760,31 +758,26 @@ const styles = {
     padding: '20px'
   },
   modal: {
-    background: '#1a1a1a',
     borderRadius: '12px',
     maxWidth: '500px',
     width: '100%',
     maxHeight: '90vh',
     overflow: 'auto',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-    border: '1px solid #2d2d2d'
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
   },
   modalHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '20px 24px',
-    borderBottom: '1px solid #2d2d2d'
+    padding: '20px 24px'
   },
   modalTitle: {
     fontSize: '18px',
-    fontWeight: '600',
-    color: '#ececec'
+    fontWeight: '600'
   },
   modalClose: {
     background: 'none',
     border: 'none',
-    color: '#6b6b6b',
     cursor: 'pointer',
     padding: '4px',
     display: 'flex',
@@ -801,16 +794,12 @@ const styles = {
     display: 'block',
     fontSize: '14px',
     fontWeight: '500',
-    color: '#ececec',
     marginBottom: '8px'
   },
   input: {
     width: '100%',
     padding: '12px',
-    background: '#0d0d0d',
-    border: '1px solid #2d2d2d',
     borderRadius: '8px',
-    color: '#ececec',
     fontSize: '14px',
     outline: 'none',
     fontFamily: 'inherit'
@@ -833,9 +822,7 @@ const styles = {
   cancelBtn: {
     padding: '10px 20px',
     background: 'transparent',
-    border: '1px solid #2d2d2d',
     borderRadius: '8px',
-    color: '#ececec',
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -866,13 +853,10 @@ const styles = {
   },
   successMessage: {
     fontSize: '15px',
-    color: '#ececec',
     marginBottom: '24px',
     lineHeight: '1.5'
   },
   inviteSection: {
-    background: '#0d0d0d',
-    border: '1px solid #2d2d2d',
     borderRadius: '12px',
     padding: '20px',
     marginBottom: '24px'
@@ -880,12 +864,10 @@ const styles = {
   inviteTitle: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#ececec',
     marginBottom: '8px'
   },
   inviteDesc: {
     fontSize: '14px',
-    color: '#b4b4b4',
     marginBottom: '16px',
     lineHeight: '1.5'
   },
@@ -893,8 +875,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    background: '#0d0d0d',
-    border: '1px solid #2d2d2d',
     borderRadius: '8px',
     padding: '12px 16px',
     marginBottom: '12px'
@@ -910,9 +890,7 @@ const styles = {
   copyBtn: {
     padding: '8px',
     background: 'transparent',
-    border: '1px solid #2d2d2d',
     borderRadius: '6px',
-    color: '#ececec',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -923,7 +901,6 @@ const styles = {
     alignItems: 'flex-start',
     gap: '8px',
     fontSize: '13px',
-    color: '#6b6b6b',
     lineHeight: '1.4'
   }
 };

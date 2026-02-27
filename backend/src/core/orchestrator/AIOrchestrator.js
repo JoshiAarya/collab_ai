@@ -322,26 +322,39 @@ Please provide an updated summary that addresses the user's request:`;
 
       const summaryText = summaries.map(s => s.content).join('\n\n');
       const docText = documents.map(d => `${d.title}: ${d.content.substring(0, 500)}`).join('\n\n');
-      const messageText = allMessages.slice(-50).map(m => `${m.user}: ${m.text}`).join('\n');
+      const messageText = allMessages.slice(-100).map(m => `${m.user?.username || 'User'}: ${m.text}`).join('\n');
 
-      const prompt = `Analyze this project data and extract insights:
+      const prompt = `You are analyzing a collaborative project workspace. Based on the conversation history, provide strategic insights about where this project is heading and what matters most.
 
-RECENT MESSAGES:
+CONVERSATION HISTORY (most recent 100 messages):
 ${messageText}
 
-DOCUMENTS:
-${docText}
+${docText ? `DOCUMENTS:\n${docText}\n` : ''}
+${summaryText ? `PREVIOUS SUMMARIES:\n${summaryText}\n` : ''}
 
-SUMMARIES:
-${summaryText}
+Analyze the ACTUAL discussion flow and provide:
+1. Main topics being actively discussed (not just mentioned once)
+2. Clear decisions that were made by the team
+3. Real blockers or open questions that need resolution
+4. Concrete next steps the team should take
+5. A one-sentence summary of the project's current direction
 
-Extract and return ONLY valid JSON:
+Return ONLY valid JSON (no markdown, no explanation):
 {
-  "topics": ["topic1", "topic2"],
-  "decisions": ["decision1"],
-  "blockers": ["blocker1"],
-  "nextSteps": ["step1", "step2"]
-}`;
+  "projectSummary": "one sentence about what this project is about and where it's heading",
+  "topics": ["only topics with multiple messages", "active discussions"],
+  "decisions": ["concrete decisions made", "agreements reached"],
+  "blockers": ["actual blockers or unanswered questions"],
+  "nextSteps": ["specific actionable next steps"],
+  "stage": "ideation|planning|development|review|blocked"
+}
+
+IMPORTANT: 
+- Only include items that are ACTUALLY discussed in the messages
+- Skip generic phrases like "discuss X", "decide on Y" 
+- Focus on what's REAL and ACTIONABLE
+- If there are no real blockers, return empty array
+- Stage should reflect actual project state from conversations`;
 
       const response = await this.callProvider({
         provider: selectedModel.provider,
@@ -349,16 +362,24 @@ Extract and return ONLY valid JSON:
         context: null,
         prompt,
         projectId,
-        systemPrompt: 'You are an assistant that analyzes project discussions and extracts structured insights.',
-        temperature: 0.3,
-        maxTokens: 512
+        systemPrompt: 'You are a strategic project analyst. Extract only meaningful, actionable insights from real conversations.',
+        temperature: 0.2,
+        maxTokens: 800
       });
 
       // Parse JSON response
       try {
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          return JSON.parse(jsonMatch[0]);
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            topics: parsed.topics || [],
+            decisions: parsed.decisions || [],
+            blockers: parsed.blockers || [],
+            nextSteps: parsed.nextSteps || [],
+            projectSummary: parsed.projectSummary || '',
+            stage: parsed.stage || 'ideation'
+          };
         }
       } catch (e) {
         logger.error('Failed to parse AI insights', { error: e.message });
@@ -368,7 +389,9 @@ Extract and return ONLY valid JSON:
         topics: [],
         decisions: [],
         blockers: [],
-        nextSteps: []
+        nextSteps: [],
+        projectSummary: '',
+        stage: 'ideation'
       };
 
     } catch (error) {

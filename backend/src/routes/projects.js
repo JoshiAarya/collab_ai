@@ -617,19 +617,92 @@ router.get('/:projectId/dashboard', async (req, res) => {
     // PHASE 5: Generate strategic signals (computed dynamically)
     const signals = await StrategicSignalEngine.generateSignals({ projectId });
 
+    // Calculate activity for last 7 days and participant contributions
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const activityByDay = Array(7).fill(0);
+    const participantStats = {};
+    const discussionStats = [];
+    
+    for (const disc of discussions) {
+      const messages = await discussionService.getDiscussionMessages(disc._id);
+      const discMessageCount = messages.length;
+      
+      discussionStats.push({
+        title: disc.title,
+        count: discMessageCount,
+        isMain: disc.isMain
+      });
+      
+      messages.forEach(msg => {
+        // Activity by day
+        const msgDate = new Date(msg.timestamp);
+        if (msgDate >= sevenDaysAgo) {
+          const daysAgo = Math.floor((Date.now() - msgDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysAgo < 7) {
+            activityByDay[6 - daysAgo]++;
+          }
+        }
+        
+        // Participant contributions
+        const username = msg.user?.username || msg.user || 'Unknown';
+        if (!msg.isAI && username !== 'Unknown') {
+          participantStats[username] = (participantStats[username] || 0) + 1;
+        }
+      });
+    }
+    
+    const topParticipants = Object.entries(participantStats)
+      .map(([username, count]) => ({ username, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    
+    const topDiscussions = discussionStats
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    
+    // Calculate message type breakdown
+    let userMessages = 0;
+    let aiMessages = 0;
+    for (const disc of discussions) {
+      const messages = await discussionService.getDiscussionMessages(disc._id);
+      messages.forEach(msg => {
+        if (msg.isAI) aiMessages++;
+        else userMessages++;
+      });
+    }
+    
+    // Filter function for cleaning up insights
+    const filterGarbage = (items) => {
+      if (!items || !Array.isArray(items)) return [];
+      return items.filter(item => {
+        const text = (typeof item === 'string' ? item : item.text || '').toLowerCase().trim();
+        if (!text || text.length < 10) return false;
+        const garbage = ['none', 'none mentioned', 'no blockers', 'n/a', 'invalid token', 'access denied', 'discuss', 'decide on'];
+        return !garbage.some(g => text.includes(g));
+      });
+    };
+
     if (insights) {
       // Use persistent insights (fast, deterministic)
       const dashboard = {
         totalMessages,
         activeDiscussions: discussions.length,
         documentCount: documents.length,
-        topics: insights.topics.map(t => t.name) || [],
-        decisions: insights.decisions.map(d => d.text) || [],
-        openQuestions: insights.blockers.filter(b => !b.resolved).map(b => b.text) || [],
-        actionItems: insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text) || [],
+        topics: insights.topics.map(t => t.name).slice(0, 8) || [],
+        decisions: filterGarbage(insights.decisions.map(d => d.text)).slice(0, 8) || [],
+        openQuestions: filterGarbage(insights.blockers.filter(b => !b.resolved).map(b => b.text)).slice(0, 8) || [],
+        actionItems: filterGarbage(insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text)).slice(0, 8) || [],
+        projectSummary: insights.projectSummary || '',
         lastUpdated: insights.lastUpdated,
-        source: 'persistent', // Track data source
-        signals // PHASE 5: Strategic signals
+        source: 'persistent',
+        signals,
+        activity: activityByDay,
+        stage: insights.stage || 'ideation',
+        participants: topParticipants,
+        discussionBreakdown: topDiscussions,
+        messageTypes: { user: userMessages, ai: aiMessages }
       };
 
       res.json({ success: true, dashboard });
@@ -642,12 +715,18 @@ router.get('/:projectId/dashboard', async (req, res) => {
         totalMessages,
         activeDiscussions: discussions.length,
         documentCount: documents.length,
-        topics: llmInsights.topics || [],
-        decisions: llmInsights.decisions || [],
-        openQuestions: llmInsights.blockers || [],
-        actionItems: llmInsights.nextSteps || [],
-        source: 'llm-generated', // Track data source
-        signals // PHASE 5: Strategic signals (empty if no insights)
+        topics: filterGarbage(llmInsights.topics || []).slice(0, 8),
+        decisions: filterGarbage(llmInsights.decisions || []).slice(0, 8),
+        openQuestions: filterGarbage(llmInsights.blockers || []).slice(0, 8),
+        actionItems: filterGarbage(llmInsights.nextSteps || []).slice(0, 8),
+        projectSummary: llmInsights.projectSummary || '',
+        source: 'llm-generated',
+        signals,
+        activity: activityByDay,
+        stage: llmInsights.stage || 'ideation',
+        participants: topParticipants,
+        discussionBreakdown: topDiscussions,
+        messageTypes: { user: userMessages, ai: aiMessages }
       };
 
       res.json({ success: true, dashboard });
