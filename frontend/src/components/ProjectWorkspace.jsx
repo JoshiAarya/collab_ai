@@ -7,6 +7,10 @@ import ModelSelector from './ModelSelector';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
 import apiRequest, { getWsUrl } from '../utils/api.js';
+import ProjectIntelligenceCard from './ProjectIntelligenceCard';
+import DecisionTimeline from './DecisionTimeline';
+import BlockerTracker from './BlockerTracker';
+import Dashboard from './Dashboard';
 
 export default function ProjectWorkspace({ project, onBack }) {
   const { user, token } = useAuth();
@@ -24,6 +28,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
   const [showSummaries, setShowSummaries] = useState(false);
+  const [showAllSummaries, setShowAllSummaries] = useState(false);
   const [showCreateDiscussion, setShowCreateDiscussion] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showInviteToDiscussion, setShowInviteToDiscussion] = useState(false);
@@ -174,7 +179,7 @@ export default function ProjectWorkspace({ project, onBack }) {
         setMessages(data.messages);
         setIsLoadingMessages(false);
       } else if (data.type === 'project-chat') {
-        setMessages(prev => [...prev, data.message]);
+        setMessages(prev => prev.some(m => m._id && m._id === data.message._id) ? prev : [...prev, data.message]);
         setIsSendingMessage(false);
         
         // Check if AI is responding
@@ -310,11 +315,21 @@ export default function ProjectWorkspace({ project, onBack }) {
     return <Documents project={project} onClose={() => setShowDocuments(false)} token={token} colors={colors} />;
   }
 
-  if (showSummaries && currentDiscussion) {
+  if (showSummaries && currentDiscussion && !currentDiscussion.isMain) {
     return <Summaries 
       project={project} 
       discussion={currentDiscussion}
       onClose={() => setShowSummaries(false)} 
+      token={token}
+      colors={colors}
+    />;
+  }
+
+  if (showAllSummaries) {
+    return <AllDiscussionSummaries
+      project={project}
+      discussions={discussions}
+      onClose={() => setShowAllSummaries(false)}
       token={token}
       colors={colors}
     />;
@@ -398,6 +413,23 @@ export default function ProjectWorkspace({ project, onBack }) {
             discussions.map(disc => {
             const isParticipant = disc.participants?.some(p => p._id === user._id) || isOwner;
             const displayTitle = disc.isMain ? '# Main Thread' : disc.title;
+
+            // Stale summary: discussion got 10+ more messages since last summary
+            const msgCount = disc.messageCount || 0;
+            const summaryMsgCount = disc.latestSummary?.messageCountAtSummary || 0;
+            const isStaleSummary = !disc.isMain && disc.latestSummary && (msgCount - summaryMsgCount) >= 10;
+
+            // Relative time for lastActivity
+            const relativeTime = (date) => {
+              if (!date) return '';
+              const diff = Date.now() - new Date(date).getTime();
+              const mins = Math.floor(diff / 60000);
+              if (mins < 1) return 'just now';
+              if (mins < 60) return `${mins}m ago`;
+              const hrs = Math.floor(mins / 60);
+              if (hrs < 24) return `${hrs}h ago`;
+              return `${Math.floor(hrs / 24)}d ago`;
+            };
             
             return (
               <div
@@ -408,42 +440,57 @@ export default function ProjectWorkspace({ project, onBack }) {
                   background: currentDiscussion?._id === disc._id ? 'rgba(255,255,255,0.1)' : 'transparent',
                   fontWeight: disc.isMain ? '600' : '400',
                   borderLeft: disc.isMain ? '3px solid #10a37f' : 'none',
-                  paddingLeft: disc.isMain ? '9px' : '12px'
+                  paddingLeft: disc.isMain ? '9px' : '12px',
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  gap: '2px'
                 }}
               >
-                <div 
-                  onClick={() => switchDiscussion(disc)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}
-                >
-                  {disc.isMain ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4z"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                    </svg>
-                  )}
-                  <span style={styles.discussionName}>{displayTitle}</span>
-                </div>
-                {isParticipant && !disc.isMain && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setInviteDiscussionId(disc._id);
-                      setShowInviteToDiscussion(true);
-                    }}
-                    style={styles.inviteDiscussionBtn}
-                    title="Invite member to discussion"
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div 
+                    onClick={() => switchDiscussion(disc)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, cursor: 'pointer' }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                      <circle cx="8.5" cy="7" r="4"/>
-                      <line x1="20" y1="8" x2="20" y2="14"/>
-                      <line x1="23" y1="11" x2="17" y2="11"/>
-                    </svg>
-                  </button>
-                )}
+                    {disc.isMain ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4z"/>
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                      </svg>
+                    )}
+                    <span style={styles.discussionName}>{displayTitle}</span>
+                    {isStaleSummary && (
+                      <span title="Summary may be outdated" style={{ fontSize: '12px', marginLeft: '2px' }}>⚠️</span>
+                    )}
+                  </div>
+                  {isParticipant && !disc.isMain && (
+                    <div style={{ display: 'flex', gap: '2px' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInviteDiscussionId(disc._id);
+                          setShowInviteToDiscussion(true);
+                        }}
+                        style={styles.inviteDiscussionBtn}
+                        title="Invite member to discussion"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                          <circle cx="8.5" cy="7" r="4"/>
+                          <line x1="20" y1="8" x2="20" y2="14"/>
+                          <line x1="23" y1="11" x2="17" y2="11"/>
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {/* Metadata row */}
+                <div style={{ display: 'flex', gap: '8px', paddingLeft: '24px', fontSize: '11px', color: colors.textTertiary }}>
+                  {disc.messageCount > 0 && <span>{disc.messageCount} msg</span>}
+                  {disc.lastActivity && <span>{relativeTime(disc.lastActivity)}</span>}
+                </div>
               </div>
             );
           })
@@ -499,17 +546,31 @@ export default function ProjectWorkspace({ project, onBack }) {
                   </svg>
                   Documents
                 </button>
-                <button 
-                  onClick={() => { setShowSummaries(true); setShowMenu(false); }} 
-                  style={{...styles.dropdownItem, color: colors.text}}
-                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-                  </svg>
-                  Summaries
-                </button>
+                {currentDiscussion?.isMain ? (
+                  <button 
+                    onClick={() => { setShowAllSummaries(true); setShowMenu(false); }} 
+                    style={{...styles.dropdownItem, color: colors.text}}
+                    onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                    </svg>
+                    Discussion Summaries
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => { setShowSummaries(true); setShowMenu(false); }} 
+                    style={{...styles.dropdownItem, color: colors.text}}
+                    onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                    </svg>
+                    Summarize
+                  </button>
+                )}
                 <button 
                   onClick={() => { setShowSettings(true); setShowMenu(false); }} 
                   style={{...styles.dropdownItem, color: colors.text}}
@@ -1128,7 +1189,7 @@ function InviteToDiscussionModal({ project, discussionId, token, onClose, onInvi
   );
 }
 
-function Dashboard({ project, onClose, token, colors }) {
+function _DashboardLegacy({ project, onClose, token, colors }) {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedModal, setExpandedModal] = useState(null); // 'topics', 'decisions', 'blockers', 'actions'
@@ -1145,12 +1206,32 @@ function Dashboard({ project, onClose, token, colors }) {
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       const data = await response.json();
-      console.log('Dashboard data received:', data);
       if (data.success) {
         setDashboard(data.dashboard);
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshDashboard = async () => {
+    setLoading(true);
+    try {
+      const response = await apiRequest(
+        `/api/projects/${project._id}/dashboard/refresh`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      const data = await response.json();
+      if (data.success) {
+        setDashboard(data.dashboard);
+      }
+    } catch (error) {
+      console.error('Error refreshing dashboard:', error);
     } finally {
       setLoading(false);
     }
@@ -1205,11 +1286,11 @@ function Dashboard({ project, onClose, token, colors }) {
 
   const validBlockers = dashboard ? getValidBlockers(dashboard.openQuestions) : [];
 
-  // Calculate topic distribution
-  const topicData = dashboard?.topics ? 
-    (Array.isArray(dashboard.topics[0]) ? dashboard.topics : dashboard.topics.map(t => ({ name: t, count: 1 })))
-    : [];
-  const sortedTopics = topicData.sort((a, b) => (b.count || 0) - (a.count || 0));
+  // Calculate topic distribution — handle both string[] (legacy) and {name,count}[] (entity model)
+  const topicData = (dashboard?.topics || []).map(t =>
+    typeof t === 'string' ? { name: t, count: 1 } : t
+  );
+  const sortedTopics = [...topicData].sort((a, b) => (b.count || 0) - (a.count || 0));
   const topTopics = sortedTopics.slice(0, 5);
   const remainingTopics = sortedTopics.length - 5;
   const maxCount = Math.max(...topTopics.map(t => t.count || 1), 1);
@@ -1235,11 +1316,11 @@ function Dashboard({ project, onClose, token, colors }) {
             )}
           </div>
         </div>
-        <button onClick={loadDashboard} style={{...styles.dashboardRefreshBtn, background: '#8b5cf6', border: `1px solid ${colors.border}`, color: '#fff'}} disabled={loading}>
+        <button onClick={refreshDashboard} style={{...styles.dashboardRefreshBtn, background: colors.surface, border: `1px solid ${colors.border}`, color: colors.text}} disabled={loading}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
           </svg>
-          Refresh
+          {loading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
@@ -1288,6 +1369,75 @@ function Dashboard({ project, onClose, token, colors }) {
           <div style={styles.dashboardGrid}>
             {/* Left Column - Intelligence */}
             <div style={styles.dashboardLeftCol}>
+
+              {/* Strategic Signals */}
+              {dashboard.signals?.length > 0 && (
+                <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {dashboard.signals.map((signal, i) => {
+                    const color = signal.severity === 'high' ? '#ef4444' : signal.severity === 'medium' ? '#f59e0b' : '#6b7280';
+                    const bg = signal.severity === 'high' ? 'rgba(239,68,68,0.08)' : signal.severity === 'medium' ? 'rgba(245,158,11,0.08)' : 'rgba(107,114,128,0.08)';
+                    const icon = signal.type === 'decision_drift' ? '⚡' : signal.type === 'blocker_stagnation' ? '🔴' : '📉';
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '10px',
+                        padding: '12px 16px', borderRadius: '8px',
+                        background: bg, border: `1px solid ${color}30`
+                      }}>
+                        <span style={{ fontSize: '14px', flexShrink: 0 }}>{icon}</span>
+                        <span style={{ fontSize: '13px', color: colors.text, lineHeight: '1.5' }}>{signal.message}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Project Intelligence Card — entity model data */}
+              {dashboard.projectState && (
+                <ProjectIntelligenceCard
+                  projectState={dashboard.projectState}
+                  colors={colors}
+                />
+              )}
+
+              {/* Decision Timeline — entity model data */}
+              {dashboard.enrichedDecisions?.length > 0 && (
+                <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`, marginBottom: '16px'}}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text, marginBottom: '16px'}}>Decision Timeline</h3>
+                  <DecisionTimeline enrichedDecisions={dashboard.enrichedDecisions} colors={colors} />
+                </div>
+              )}
+
+              {/* Revised Decisions — superseded by newer choices */}
+              {dashboard.enrichedSuperseded?.length > 0 && (
+                <div style={{
+                  ...styles.dashboardCard,
+                  background: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderLeft: '3px solid #6b7280',
+                  marginBottom: '16px',
+                  opacity: 0.85
+                }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: '600', color: colors.textSecondary, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>↩</span> Revised Decisions
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {dashboard.enrichedSuperseded.map((d, i) => (
+                      <div key={i} style={{ padding: '10px 12px', background: colors.background, borderRadius: '6px', border: `1px solid ${colors.border}` }}>
+                        <div style={{ fontSize: '13px', color: colors.textSecondary, textDecoration: 'line-through', marginBottom: d.supersededByText ? '6px' : 0 }}>
+                          {d.text}
+                        </div>
+                        {d.supersededByText && (
+                          <div style={{ fontSize: '13px', color: colors.text, display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                            <span style={{ color: '#10b981', flexShrink: 0 }}>→</span>
+                            {d.supersededByText}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Topic Distribution */}
               <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1414,6 +1564,15 @@ function Dashboard({ project, onClose, token, colors }) {
 
             {/* Right Column - Project State */}
             <div style={styles.dashboardRightCol}>
+
+              {/* Blocker Tracker — entity model data */}
+              {dashboard.enrichedBlockers?.length > 0 && (
+                <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`, marginBottom: '16px'}}>
+                  <h3 style={{...styles.cardTitleNew, color: colors.text, marginBottom: '16px'}}>Blocker Tracker</h3>
+                  <BlockerTracker enrichedBlockers={dashboard.enrichedBlockers} colors={colors} />
+                </div>
+              )}
+
               {/* Stage Panel */}
               <div style={{...styles.dashboardCard, background: colors.surface, border: `1px solid ${colors.border}`}}>
                 <h3 style={{...styles.cardTitleNew, color: colors.text}}>Current Stage</h3>
@@ -2188,6 +2347,130 @@ function Summaries({ project, discussion, onClose, token, colors }) {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AllDiscussionSummaries({ project, discussions, onClose, token, colors }) {
+  const [summariesByDisc, setSummariesByDisc] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  const parallelDiscussions = discussions.filter(d => !d.isMain);
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const loadAll = async () => {
+    try {
+      const response = await apiRequest(
+        `/api/projects/${project._id}/summaries`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      const data = await response.json();
+      if (data.success) {
+        // Group by discussionId
+        const grouped = {};
+        data.summaries.forEach(s => {
+          const key = s.discussionId;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(s);
+        });
+        setSummariesByDisc(grouped);
+      }
+    } catch (err) {
+      console.error('Error loading all summaries:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const relativeTime = (date) => {
+    if (!date) return '';
+    const diff = Date.now() - new Date(date).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <div style={{...styles.fullPage, background: colors.background}}>
+      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+        <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back
+        </button>
+        <h1 style={{...styles.pageTitle, color: colors.text}}>Discussion Summaries</h1>
+        <div style={{ width: '100px' }} />
+      </div>
+
+      <div style={styles.pageContent}>
+        {loading ? (
+          <div style={styles.emptyState}>
+            <p style={{color: colors.textSecondary}}>Loading...</p>
+          </div>
+        ) : parallelDiscussions.length === 0 ? (
+          <div style={styles.emptyState}>
+            <p style={{color: colors.textSecondary}}>No parallel discussions yet</p>
+          </div>
+        ) : (
+          <div style={styles.summariesList}>
+            {parallelDiscussions.map(disc => {
+              const discSummaries = summariesByDisc[disc._id] || [];
+              const msgCount = disc.messageCount || 0;
+              const latestSummary = discSummaries[0];
+              const isStaleSummary = latestSummary && (msgCount - (latestSummary.messageCountAtSummary || 0)) >= 10;
+
+              return (
+                <div key={disc._id} style={{...styles.summaryCard, background: colors.surface, border: `1px solid ${colors.border}`, marginBottom: '20px'}}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.textSecondary} strokeWidth="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                      </svg>
+                      <span style={{ color: colors.text, fontWeight: '600', fontSize: '15px' }}>{disc.title}</span>
+                      {isStaleSummary && (
+                        <span title="Summary may be outdated — discussion has grown significantly" style={{ fontSize: '13px' }}>⚠️ stale</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: colors.textTertiary }}>
+                      {msgCount > 0 && <span>{msgCount} messages</span>}
+                      {disc.lastActivity && <span>active {relativeTime(disc.lastActivity)}</span>}
+                    </div>
+                  </div>
+
+                  {discSummaries.length === 0 ? (
+                    <p style={{ color: colors.textTertiary, fontSize: '13px', fontStyle: 'italic' }}>No summary yet</p>
+                  ) : (
+                    discSummaries.map(s => (
+                      <div key={s._id} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: `1px solid ${colors.border}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '12px', color: colors.textTertiary }}>
+                            {new Date(s.createdAt).toLocaleDateString()} · via {s.generatedBy}
+                          </span>
+                          {s.messageCountAtSummary > 0 && (
+                            <span style={{ fontSize: '12px', color: colors.textTertiary }}>
+                              at {s.messageCountAtSummary} messages
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ color: colors.text, fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                          {s.content}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -3473,15 +3756,13 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     border: 'none',
     borderRadius: '8px',
-    color: '#fff',
     fontSize: '14px',
-    fontWeight: '600',
+    fontWeight: '500',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    transition: 'transform 0.2s'
+    transition: 'opacity 0.2s'
   },
   dashboardLoading: {
     display: 'flex',

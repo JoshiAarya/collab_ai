@@ -9,14 +9,12 @@ const documentChunkSchema = new mongoose.Schema({
   projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: true,
-    index: true
+    required: true
   },
   documentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Document',
-    required: true,
-    index: true
+    required: true
   },
   chunkIndex: {
     type: Number,

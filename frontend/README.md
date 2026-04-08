@@ -1,313 +1,378 @@
 # CollabAI Frontend
 
-React-based frontend for the Real-Time AI Collaborative Workspace.
+React 19 frontend for CollabAI — a real-time collaborative workspace with AI-powered engineering knowledge extraction.
 
-## Features
+## Stack
 
-- **Authentication**: Email/password login and registration
-- **Project Management**: Create, join, and manage projects
-- **Real-time Chat**: WebSocket-based messaging
-- **AI Integration**: Invoke CollabAI with `@CollabAI` mentions
-- **Parallel Discussions**: Multiple focused conversations per project
-- **Document Upload**: Upload project documents for AI context
-- **Dashboard**: Project insights (owner only)
-- **Settings**: Configure LLM provider and invite codes
-
-## Tech Stack
-
-- **React 19** - UI framework
-- **Vite** - Build tool and dev server
-- **WebSocket** - Real-time communication
-- **Marked** - Markdown rendering
-- **DOMPurify** - XSS protection
+- **React 19** + **Vite 7**
+- **WebSocket** — real-time messaging
+- **Marked** + **DOMPurify** — markdown rendering with XSS protection
+- **Xenova embeddings** (via backend) — semantic document search
 
 ## Setup
 
-### Install Dependencies
+### Install dependencies
 ```bash
 npm install
 ```
 
-### Start Development Server
+### Configure environment
+```bash
+cp .env.example .env
+```
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+VITE_WS_BASE_URL=ws://localhost:8080
+```
+
+### Start dev server
 ```bash
 npm run dev
 ```
 
 Frontend runs on `http://localhost:5173`
 
-### Build for Production
+### Build for production
 ```bash
 npm run build
 ```
 
-### Preview Production Build
-```bash
-npm run preview
-```
+---
 
 ## Project Structure
 
 ```
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── Auth.jsx              # Login/Register
-│   │   ├── ProjectList.jsx       # Project list view
-│   │   └── ProjectWorkspace.jsx  # Main workspace
-│   ├── contexts/
-│   │   └── AuthContext.jsx       # Auth state management
-│   ├── assets/
-│   │   └── react.svg
-│   ├── App.jsx                   # Main app with routing
-│   ├── main.jsx                  # Entry point
-│   └── index.css                 # Global styles
-├── public/
-├── index.html
-├── vite.config.js
-└── package.json
+frontend/src/
+├── components/
+│   ├── Auth.jsx                    # Login + Register
+│   ├── Onboarding.jsx              # 4-step first-time flow
+│  ist, create, join
+│   ├── ProjectWorkspace.jsx        # Main workspace UI
+│   ├── ProjectIntelligenceCard.jsx # Stage, momentum, counts
+│   ├── DecisionTimeline.jsx        # Decisions with rationale
+│   ├── BlockerTracker.jsx          # Blockers with severity + age
+│   ├── ModelSelector.jsx           # LLM provider + API key management
+│   ├── Sidebar.jsx                 # Navigation sidebar
+│   ├── ProfileModal.jsx            # Profile + password + stats
+│   └── shared/
+│       ├── ErrorBoundary.jsx
+│       ├── Toast.jsx
+│       └── SuccessModal.jsx
+├── contexts/
+│   ├── AuthContext.jsx             # Auth state, login/register/logout
+│   ├── ThemeContext.jsx            # Light/dark theme, persists to DB
+│   └── ToastContext.jsx            # Global toast notifications
+├── hooks/
+│   └── useToast.js
+├── services/
+│   ├── api.js                      # APIService class
+│   ├── webso         # WebSocketService (reconnect, queue, heartbeat)
+│   └── projectService.js
+├── utils/
+│   ├── api.js                      # apiRequest() + getWsUrl()
+│   ├── avatarColors.js             # djb2 hash → 14 colors
+│   ├── errorHandler.js
+│   └── router.js                   # Invite URL parsing
+├── config/
+│   └── index.js                    # API base URL, endpoints, feature flags
+├── styles/
+│   └── theme.js                    # Theme color definitions
+├── App.jsx
+├── main.jsx
+└── index.css
 ```
 
-## Components
+---
 
-### Auth.jsx
-- Login and registration forms
-- Email/password authentication
-- Form validation
-- Error handling
-
-### ProjectList.jsx
-- Display user's projects
-- Create new project modal
-- Join project via invite code
-- Project cards with metadata
+## Key Components
 
 ### ProjectWorkspace.jsx
-- Main collaboration interface
-- Sidebar with discussions
-- Real-time chat area
-- AI invocation with `@CollabAI`
-- Dashboard view (owner only)
-- Documents view
-- Settings view
+The main UI. Tabs: Chat · Dashboard · Documents · Summaries · Settings.
 
-## State Management
+**Chat**
+- WebSocket real-time messaging
+- `@CollabAI` mention triggers AI response
+- Markdown rendering (marked + DOMPurify)
+- Mention autocomplete
 
-### AuthContext
-Provides authentication state and methods:
-- `user` - Current user object
-- `token` - JWT token
-- `loading` - Loading state
-- `login(email, password)` - Login method
-- `register(username, email, password)` - Register method
-- `logout()` - Logout method
+**Dashboard** (owner only)
+- `ProjectIntelligenceCard` — stage badge, momentum trend, blocker/action/topic counts
+- `DecisionTimeline` — decisions with topic tag, expandable rationale, relative timestamp
+- `BlockerTracker` — blockeropic tag
+- Activity chart (7-day), discussion breakdown, contributor stats
+- Strategic signals panel
+- "View All" modals for decisions and blockers
 
-## WebSocket Integration
+**Documents**
+- Upload `.txt` / `.md` files
+- Embedding status indicator
+- Uploaded documents list
 
-### Connection
+**Summaries**
+- Generate discussion summary
+- Refine with custom prompt
+- Delete
+
+**Settings**
+- Invite link (copy)
+- Email invite
+- Members list
+
+### ModelSelector.jsx
+Supports 6 providers: Server (Groq) · OpenAI · Anthropic · Google · DeepSeek · xAI.
+ment modal per provider. Search filter.
+
+### Sidebar.jsx
+48px icon bar + 280px collapsible panel. User section → dropdown: Profile · Switch Theme · Logout.
+
+---
+
+## AI Usage
+
+Invoke CollabAI in any discussion:
+```
+@CollabAI what decisions have we made so far?
+@CollabAI summarize the current blockers
+@CollabAI what should we work on next?
+```
+
+The AI responds with context from:
+- Project knowledge (decisions, blockers, topics, actions)
+- Uploaded documents (semantic search)
+- Recent discussion history
+ries
+
+---
+
+## Theme System
+
+CollabAI supports light anser's profile (persists across devices).
+
+Toggle via the sidebar user menu → Switch Theme.
+
+All components consume colors from `ThemeContext` — no hardcoded color values in component files.
+
+---
+
+## WebSocket
+
+The `WebSocketService` (`services/websocket.js`) handles:
+- Automatic reconnection with exponential backoff
+- Message queue during disconnection
+- Heartbeat ping/pong (30s)
+- Auth on connect
+
 ```javascript
-const ws = new WebSocket('ws://localhost:8080');
+// Connection lifecycle
+ws.connect(token)
+ws.send({ type: 'project-chat', text: 'hello' })
+ws.disconnect()
 ```
 
-### Authentication
-```javascript
-ws.send(JSON.stringify({ type: 'auth', token }));
-```
+Events received:
+- `project-chat` — new message (user or AI)
+- `ai-thinking` — AI is generating
+- `ai-error` — AI generation failed
+- `discussion-joined` — joined with message history
 
-### Join Project
-```javascript
-ws.send(JSON.stringify({
-  type: 'join-project',
-  projectId,
-  discussionId
-}));
-```
+---
 
-### Send Message
-```javascript
-ws.send(JSON.stringify({
-  type: 'project-chat',
-  text: message
-}));
-```
+## Scripts
 
-### Receive Messages
-```javascript
-ws.onmessage = (e) => {
-  const data = JSON.parse(e.data);
-  if (data.type === 'project-chat') {
-    // Handle new message
-  }
-};
-```
-
-## API Integration
-
-### Base URL
-```javascript
-const API_URL = 'http://localhost:8080/api';
-```
-
-### Authentication Headers
-```javascript
-headers: {
-  'Authorization': `Bearer ${token}`,
-  'Content-Type': 'application/json'
-}
-```
-
-### Example: Create Project
-```javascript
-const response = await fetch('http://localhost:8080/api/projects', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  },
-  body: JSON.stringify({ title, problemStatement })
-});
-```
-
-## Styling
-
-Uses inline styles with a dark theme inspired by GitHub:
-- Background: `#0d1117`
-- Cards: `#161b22`
-- Borders: `#30363d`
-- Primary: `#238636` (green)
-- Text: `#fff`
-
-## Features Detail
-
-### AI Invocation
-Type `@CollabAI` followed by your question:
-```
-@CollabAI what have we discussed so far?
-@CollabAI summarize the key decisions
-@CollabAI what are the next steps?
-```
-
-The `@CollabAI` tag is highlighted in the input field.
-
-### Dashboard (Owner Only)
-Shows:
-- Project stage
-- Total messages
-- Active discussions
-- Document count
-- Current topics
-- Key decisions
-- Open questions
-- Suggested next steps
-
-### Documents
-- Upload `.txt`, `.md`, or `.pdf` files
-- Files are used as context for AI
-- View uploaded documents list
-
-### Settings
-- View and copy invite code
-- Switch active LLM provider
-- Configure API keys (stubbed)
-
-## Development
-
-### Hot Module Replacement
-Vite provides instant HMR for fast development.
-
-### Linting
 ```bash
-npm run lint
+npm run dev      # Dev server (HMR)
+npm run build    # Production build
+npm run preview  # Preview production build
+npm run lint     # ESLint
 ```
 
-### Code Style
-- Functional components with hooks
-- Inline styles for simplicity
-- Context API for global state
-- WebSocket for real-time updates
-
-## Environment
-
-### Backend URL
-Currently hardcoded to `http://localhost:8080`. For production, use environment variables:
-
-```javascript
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-```
-
-## Browser Support
-
-- Modern browsers with WebSocket support
-- Chrome, Firefox, Safari, Edge (latest versions)
-
-## Security
-
-- JWT tokens stored in localStorage
-- XSS protection with DOMPurify
-- Markdown rendering sanitized
-- CORS handled by backend
-
-## Performance
-
-- Lazy loading for large message lists
-- Auto-scroll to latest message
-- Efficient re-renders with React hooks
-- WebSocket for low-latency updates
+---
 
 ## Troubleshooting
 
 **WebSocket not connecting**
 - Check backend is running on port 8080
-- Verify WebSocket URL: `ws://localhost:8080`
+- Verify `VITE_WS_BASE_URL` in `.env`
 
-**Authentication failing**
-- Check token is stored in localStorage
-- Verify backend JWT_SECRET matches
-
-**Messages not appearing**
-- Check WebSocket connection status
-- Verify you're in the correct discussion
-- Check browser console for errors
+**AI not responding**
+- Check backend logs for rate limit or API key errors
+- Verify `@CollabAI` prefix is included
 
 **Dashboard not loading**
-- Ensure you're the project owner
-- Check backend AI service is configured
-- Verify Gemini API key is set
+- Only visible to project owner
+- Requires at least some conversation history for entity model to populate
 
-## Future Enhancements
+**Theme not persisting**
+- Requires authenticated session
+- Check backend `/api/user/profile` PUT is reachable
 
-- [ ] Typing indicators
-- [ ] Message reactions
-- [ ] File preview
-- [ ] Search functionality
-- [ ] Notifications
-- [ ] Dark/light theme toggle
-- [ ] Mobile responsive design
-- [ ] Offline support
-- [ ] Message editing/deletion
-- [ ] User profiles
+- **React 19** + **Vite 7**
+- **WebSocket** — real-time messaging
+- **Marked** + **DOMPurify** — markdown rendering with XSS protection
+- **Xenova embeddings** (via backend) — semantic document search
+
+## Setup
+
+### Install dependencies
+```bash
+npm install
+```
+
+### Configure environment
+```bash
+cp .env.example .env
+```
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+VITE_WS_BASE_URL=ws://localhost:8080
+```
+
+### Start dev server
+```bash
+npm run dev
+```
+
+Frontend runs on `http://localhost:5173`
+
+### Build for production
+```bash
+npm run build
+```
+
+---
+
+## Project Structure
+
+```
+frontend/src/
+├── components/
+│   ├── Auth.jsx                    # Login + Register
+│   ├── Onboarding.jsx              # 4-step first-time flow
+│   ├── ProjectList.jsx             # Project list, create, join
+│   ├── ProjectWorkspace.jsx        # Main workspace UI
+│   ├── ProjectIntelligenceCard.jsx # Stage, momentum, counts
+│   ├── DecisionTimeline.jsx        # Decisions with rationale
+│   ├── BlockerTracker.jsx          # Blockers with severity + age
+│   ├── ModelSelector.jsx           # LLM provider + API key management
+│   ├── Sidebar.jsx                 # Navigation sidebar
+│   ├── ProfileModal.jsx            # Profile + password + stats
+│   └── shared/
+│       ├── ErrorBoundary.jsx
+│       ├── Toast.jsx
+│       └── SuccessModal.jsx
+├── contexts/
+│   ├── AuthContext.jsx             # Auth state, login/register/logout
+│   ├── ThemeContext.jsx            # Light/dark theme, persists to DB
+│   └── ToastContext.jsx            # Global toast notifications
+├── hooks/
+│   └── useToast.js
+├── services/
+│   ├── api.js                      # APIService class
+│   ├── websocket.js                # WebSocketService (reconnect, queue, heartbeat)
+│   └── projectService.js
+├── utils/
+│   ├── api.js                      # apiRequest() + getWsUrl()
+│   ├── avatarColors.js             # djb2 hash → 14 colors
+│   ├── errorHandler.js
+│   └── router.js                   # Invite URL parsing
+├── config/
+│   └── index.js                    # API base URL, endpoints, feature flags
+├── styles/
+│   └── theme.js                    # Theme color definitions
+├── App.jsx
+├── main.jsx
+└── index.css
+```
+
+---
+
+## Key Components
+
+### ProjectWorkspace.jsx
+The main UI. Tabs: Chat · Dashboard · Documents · Summaries · Settings.
+
+**Chat**
+- WebSocket real-time messaging
+- `@CollabAI` mention triggers AI response
+- Markdown rendering (marked + DOMPurify)
+- Mention autocomplete
+
+**Dashboard** (owner only)
+- `ProjectIntelligenceCard` — stage badge, momentum trend, blocker/action/topic counts
+- `DecisionTimeline` — decisions with topic tag, expandable rationale, relative timestamp
+- `BlockerTracker` — blockers with severity color, days open, topic tag
+- Activity chart (7-day), discussion breakdown, contributor stats
+- Strategic signals panel
+- "View All" modals for decisions and blockers
+
+**Documents**
+- Upload `.txt` / `.md` files
+- Embedding status indicator
+
+**Summaries**
+- Generate discussion summary
+- Refine with custom prompt
+- Delete
+
+**Settings**
+- Invite link (copy) + email invite
+- Members list
+
+### ModelSelector.jsx
+Supports 6 providers: Server (Groq) · OpenAI · Anthropic · Google · DeepSeek · xAI.
+API key management modal per provider. Search filter.
+
+### Sidebar.jsx
+48px icon bar + 280px collapsible panel. User section → dropdown: Profile · Switch Theme · Logout.
+
+---
+
+## AI Usage
+
+Invoke CollabAI in any discussion:
+```
+@CollabAI what decisions have we made so far?
+@CollabAI summarize the current blockers
+@CollabAI what should we work on next?
+```
+
+The AI responds with context from project knowledge (decisions, blockers, topics, actions), uploaded documents (semantic search), recent discussion history, and previous summaries.
+
+---
+
+## Theme System
+
+Light and dark themes. Active theme stored in user profile — persists across devices. Toggle via sidebar user menu → Switch Theme. All components consume colors from `ThemeContext`.
+
+---
+
+## WebSocket
+
+`WebSocketService` handles automatic reconnection with exponential backoff, message queue during disconnection, and heartbeat ping/pong (30s).
+
+Events received: `project-chat` · `ai-thinking` · `ai-error` · `discussion-joined`
+
+---
 
 ## Scripts
 
 ```bash
-npm run dev      # Start dev server
-npm run build    # Build for production
+npm run dev      # Dev server (HMR)
+npm run build    # Production build
 npm run preview  # Preview production build
-npm run lint     # Run ESLint
+npm run lint     # ESLint
 ```
 
-## Dependencies
+---
 
-### Production
-- `react` - UI framework
-- `react-dom` - React DOM rendering
-- `marked` - Markdown parser
-- `dompurify` - HTML sanitizer
+## Troubleshooting
 
-### Development
-- `vite` - Build tool
-- `@vitejs/plugin-react` - React plugin for Vite
-- `eslint` - Linting
+**WebSocket not connecting** — Check backend is running on port 8080. Verify `VITE_WS_BASE_URL` in `.env`.
 
-## License
+**AI not responding** — Check backend logs for rate limit or API key errors. Verify `@CollabAI` prefix is included.
 
-MIT
+**Dashboard not loading** — Only visible to project owner. Requires conversation history for entity model to populate.
+
+**Theme not persisting** — Requires authenticated session. Check backend `/api/user/profile` PUT is reachable.

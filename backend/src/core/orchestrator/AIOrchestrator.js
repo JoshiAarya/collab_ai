@@ -8,6 +8,9 @@
  */
 
 import Groq from 'groq-sdk';
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
 import logger from '../../utils/logger.js';
 import documentService from '../../services/documentService.js';
@@ -17,11 +20,17 @@ import projectService from '../../services/projectService.js';
 import EmbeddingService from '../embeddings/EmbeddingService.js';
 import VectorStore from '../vector/VectorStore.js';
 import InsightExtractor from '../intelligence/InsightExtractor.js';
-import ProjectInsightsAggregator from '../intelligence/ProjectInsightsAggregator.js';
+import KnowledgeAggregator from '../intelligence/KnowledgeAggregator.js';
 import TokenManager from '../stability/TokenManager.js';
 import RateLimiter, { RateLimitError } from '../stability/RateLimiter.js';
 import EncryptionService from '../stability/EncryptionService.js';
 import LLMGuardrails from '../stability/LLMGuardrails.js';
+// New entity models
+import Topic from '../../models/Topic.js';
+import Decision from '../../models/Decision.js';
+import Blocker from '../../models/Blocker.js';
+import ActionItem from '../../models/ActionItem.js';
+import ProjectState from '../../models/ProjectState.js';
 
 class AIOrchestrator {
   constructor() {
@@ -61,6 +70,7 @@ class AIOrchestrator {
   async handleRequest(params) {
     const { projectId, discussionId, prompt, llmConfig, userId } = params;
     const requestId = randomUUID();
+    const requestStart = Date.now();
 
     logger.ai('Orchestrator received request', {
       requestId,
@@ -89,24 +99,38 @@ class AIOrchestrator {
       const selectedModel = this.selectModel(llmConfig);
       logger.ai('Model selected', { requestId, provider: selectedModel.provider, model: selectedModel.model });
 
-      // 2. Build context intelligently (PHASE 2: now with semantic search)
-      const context = await this.buildContext({
-        projectId,
-        discussionId,
-        maxTokens: this.getModelConfig(selectedModel.provider).contextWindow,
-        prompt // Pass prompt for semantic search
-      });
+      // 2. Build context — entity-aware if new model data exists, else legacy
+      // FIX 1: use ProjectState.exists() — safer than Topic.countDocuments()
+      const hasNewModel = await ProjectState.exists({ projectId });
+      const context = hasNewModel
+        ? await this.buildEntityAwareContext({ projectId, discussionId, prompt })
+        : await this.buildContext({
+            projectId,
+            discussionId,
+            maxTokens: this.getModelConfig(selectedModel.provider).contextWindow,
+            prompt
+          });
 
       // 3. PHASE 4: Accurate token counting
       const messages = this.constructMessages(context, prompt, null);
       const tokenCount = TokenManager.countMessagesTokens(messages);
-      
-      logger.ai('Context built', {
-        documentsCount: context.documents.length,
-        summariesCount: context.summaries.length,
-        messagesCount: context.recentMessages.length,
-        crossDiscussionsCount: context.discussions.length,
+
+      // Task 5: CONTEXT_BUILT_ENTITY_MODEL / CONTEXT_BUILT_LEGACY
+      const contextLogKey = hasNewModel ? 'CONTEXT_BUILT_ENTITY_MODEL' : 'CONTEXT_BUILT_LEGACY';
+      logger.ai(contextLogKey, {
+        projectId,
+        discussionId,
+        contextType: hasNewModel ? 'entity-aware' : 'legacy',
+        decisionsLoaded: context.decisions?.length || 0,
+        blockersLoaded: context.blockers?.length || 0,
+        topicsLoaded: context.topics?.length || 0,
+        actionItemsLoaded: context.actionItems?.length || 0,
+        documentsLoaded: context.documents?.length || 0,
+        summariesLoaded: context.summaries?.length || 0,
+        messagesLoaded: context.recentMessages?.length || 0,
+        hasPinnedContext: !!(context.projectState?.pinnedContext),
         retrievalMethod: context.retrievalMethod,
+        CONTEXT_BUILD_TIME_MS: Date.now() - requestStart,
         totalInputTokens: tokenCount
       });
 
@@ -127,8 +151,8 @@ class AIOrchestrator {
         responseLength: response.length
       });
 
-      // 5. PHASE 3: Extract and aggregate insights (non-blocking)
-      // This must NOT break the main AI flow
+      // 5. Extract and aggregate insights (non-blocking)
+      // Only KnowledgeAggregator — ProjectInsightsAggregator removed (legacy, creates duplicates)
       try {
         const extracted = await InsightExtractor.extractFromAIResponse({
           projectId,
@@ -138,13 +162,12 @@ class AIOrchestrator {
           callProvider: this.callProvider.bind(this)
         });
 
-        await ProjectInsightsAggregator.mergeInsights({
+        await KnowledgeAggregator.mergeInsights({
           projectId,
           discussionId,
           extracted
         });
       } catch (extractionError) {
-        // Silent failure - insight extraction is non-critical
         logger.warn('Insight extraction failed (non-critical)', {
           requestId,
           projectId,
@@ -193,15 +216,15 @@ class AIOrchestrator {
         .join('\n');
 
       const basePrompt = `Summarize this team discussion. Focus on:
-- Key topics discussed
-- Decisions made
-- Open questions or blockers
-- Suggested next steps
+- Key topics discussed (use broad system names)
+- Decisions made (CRITICAL: Phrase all decisions starting with a choice verb, e.g., "Use Postgres", "Adopt Tailwind", "Store in Redis". Note the author by appending "(proposed by username)")
+- Open questions or real blockers (include the author by appending "(raised by username)")
+- Suggested next steps (include assignee by appending "(assigned to username)" if known)
 
 Discussion:
 ${conversationText}
 
-Provide a concise summary:`;
+Provide a concise, highly structured summary:`;
 
       const finalPrompt = customPrompt 
         ? `${basePrompt}\n\nAdditional instructions: ${customPrompt}`
@@ -416,17 +439,37 @@ IMPORTANT:
 
     // Map 'server' to 'groq'
     const actualProvider = (provider === 'server') ? 'groq' : provider;
-    
+
     // Map 'server' model to actual Groq model
     let actualModel = model;
     if (model === 'server' || !model) {
       actualModel = 'llama-3.1-8b-instant';
     }
 
-    return {
-      provider: actualProvider,
-      model: actualModel
+    return { provider: actualProvider, model: actualModel };
+  }
+
+  /**
+   * Retrieve the user-supplied API key for a provider from the project's stored keys.
+   * Falls back to server env vars for groq/server.
+   */
+  async getApiKey(provider, projectId) {
+    if (provider === 'groq' || provider === 'server') {
+      return this.getServerGroqKey();
+    }
+    if (projectId) {
+      const key = await projectService.getProjectApiKey(projectId, provider);
+      if (key) return EncryptionService.decryptForUse(key);
+    }
+    // Fallback to env vars (useful for self-hosted / dev)
+    const envMap = {
+      openai: process.env.OPENAI_API_KEY,
+      anthropic: process.env.ANTHROPIC_API_KEY,
+      google: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
     };
+    const envKey = envMap[provider];
+    if (envKey) return envKey;
+    throw new Error(`No API key configured for provider: ${provider}. Please add your API key in the model settings.`);
   }
 
   /**
@@ -453,7 +496,9 @@ IMPORTANT:
       if (project) {
         context.project = {
           title: project.title,
-          description: project.problemStatement
+          description: project.problemStatement,
+          memberCount: project.members?.length || 0,
+          stage: project.stage || 'ideation'
         };
       }
 
@@ -469,6 +514,10 @@ IMPORTANT:
 
       // Get cross-discussion context (other discussions with summaries)
       const allDiscussions = await discussionService.getProjectDiscussions(projectId);
+      // Add discussion count to project context
+      if (context.project) {
+        context.project.discussionCount = allDiscussions.length;
+      }
       for (const disc of allDiscussions) {
         if (disc._id.toString() === discussionId.toString()) continue;
         
@@ -579,47 +628,245 @@ IMPORTANT:
   }
 
   /**
+   * Entity-aware context builder (new knowledge model)
+   * Used when Topics exist for the project
+   */
+  async buildEntityAwareContext({ projectId, discussionId, prompt }) {
+    const [
+      projectState,
+      decisions,
+      blockers,
+      topics,
+      actionItems,
+      summaries,
+      messages,
+      project,
+      discussion,
+      allDiscussions
+    ] = await Promise.all([
+      ProjectState.findOne({ projectId }).lean(),
+      Decision.find({ projectId, status: 'active' })
+        .sort({ timestamp: -1 }).limit(5).lean(),
+      Blocker.find({ projectId, resolved: false })
+        .sort({ severity: -1, raisedAt: 1 }).lean(),
+      Topic.find({ projectId, status: 'stable' })
+        .sort({ count: -1 }).limit(8).lean(),
+      ActionItem.find({ projectId, status: { $ne: 'completed' } })
+        .sort({ status: -1, createdAt: 1 }).limit(5).lean(),
+      summaryService.getDiscussionSummaries(discussionId, 3),
+      discussionService.getDiscussionMessages(discussionId, 30),
+      projectService.getProjectById(projectId),
+      discussionService.getDiscussionById(discussionId),
+      discussionService.getProjectDiscussions(projectId)
+    ]);
+
+    // Semantic document retrieval — unchanged
+    let documents = [];
+    try {
+      const chunkCount = await VectorStore.count(projectId);
+      if (chunkCount > 0 && prompt) {
+        const queryEmbedding = await EmbeddingService.embedText(prompt);
+        const chunks = await VectorStore.search(projectId, queryEmbedding, 5);
+        documents = chunks.map(c => ({
+          title: c.metadata?.title || c.metadata?.documentTitle,
+          content: c.content,
+          similarity: c.similarity
+        }));
+      } else {
+        const docs = await documentService.getProjectDocuments(projectId);
+        documents = docs.slice(0, 3).map(d => ({
+          title: d.title,
+          content: d.content.substring(0, 2000)
+        }));
+      }
+    } catch (err) {
+      logger.warn('Document retrieval failed in entity context', { error: err.message });
+    }
+
+    return {
+      projectState,
+      decisions,
+      blockers,
+      topics,
+      actionItems,
+      documents,
+      summaries: summaries.map(s => s.content),
+      recentMessages: messages.map(m => ({ user: m.user, text: m.text, timestamp: m.timestamp })),
+      retrievalMethod: 'entity-aware',
+      // Project metadata for system prompt enrichment
+      project: project ? {
+        title: project.title,
+        description: project.problemStatement,
+        memberCount: project.members?.length || 0,
+        discussionCount: allDiscussions.length,
+        stage: project.stage || 'ideation'
+      } : null,
+      discussion: discussion ? {
+        title: discussion.title,
+        description: discussion.description,
+        isMain: discussion.isMain
+      } : null,
+      // Parallel discussion summaries — same logic as legacy buildContext
+      discussions: await (async () => {
+        const result = [];
+        for (const disc of allDiscussions) {
+          if (disc._id.toString() === discussionId.toString()) continue;
+          const discSummaries = await summaryService.getDiscussionSummaries(disc._id, 1);
+          if (discSummaries.length > 0) {
+            result.push({ title: disc.title, summary: discSummaries[0].content });
+          }
+        }
+        return result;
+      })()
+    };
+  }
+
+  /**
    * Build system prompt with context
    */
   buildSystemPrompt(context) {
+    // Entity-aware prompt (new knowledge model)
+    if (context.retrievalMethod === 'entity-aware') {
+      return this._buildEntitySystemPrompt(context);
+    }
+    // Legacy prompt
+    return this._buildLegacySystemPrompt(context);
+  }
+
+  /**
+   * Entity-aware system prompt — layered hierarchy
+   * Layer order: ProjectState → Decisions → Blockers → Topics → Documents → Actions → Summaries
+   */
+  _buildEntitySystemPrompt(context) {
+    let prompt = `You are CollabAI, a helpful AI assistant for team collaboration.
+Be conversational, concise, and natural. Use the project context below to give accurate, relevant responses.\n\n`;
+
+    // Project metadata
+    if (context.project) {
+      prompt += `Project: ${context.project.title}\n`;
+      if (context.project.description) prompt += `${context.project.description}\n`;
+      prompt += `Members: ${context.project.memberCount} | Discussions: ${context.project.discussionCount} | Stage: ${context.project.stage}\n\n`;
+    }
+
+    // Current discussion
+    if (context.discussion) {
+      prompt += `Current Discussion: ${context.discussion.title}`;
+      if (context.discussion.isMain) prompt += ` (main thread)`;
+      prompt += `\n\n`;
+    }
+
+    // FIX 6 Layer 1: pinnedContext always first
+    if (context.projectState?.pinnedContext) {
+      prompt += `## Project Overview\n${context.projectState.pinnedContext}\n\n`;
+    } else if (context.projectState) {
+      const ps = context.projectState;
+      prompt += `## Project State\n`;
+      prompt += `Stage: ${ps.stage}`;
+      if (ps.stageReason) prompt += ` — ${ps.stageReason}`;
+      prompt += `\nMomentum: ${ps.momentum?.trend || 'stable'} (${ps.momentum?.recentMessageCount || 0} messages this week)\n`;
+      prompt += `Open blockers: ${ps.openBlockerCount || 0} | Pending actions: ${ps.unresolvedActionCount || 0}\n\n`;
+    }
+
+    // Layer 2: Active Decisions
+    if (context.decisions?.length > 0) {
+      prompt += `## Active Decisions\n`;
+      context.decisions.forEach(d => {
+        prompt += `- ${d.text}`;
+        if (d.rationale) prompt += ` (${d.rationale})`;
+        prompt += `\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Layer 3: Open Blockers
+    if (context.blockers?.length > 0) {
+      prompt += `## Open Blockers\n`;
+      context.blockers.forEach(b => {
+        const daysOpen = b.raisedAt
+          ? Math.floor((Date.now() - new Date(b.raisedAt).getTime()) / 86400000)
+          : 0;
+        prompt += `- [${b.severity}] ${b.text}`;
+        if (daysOpen > 0) prompt += ` (open ${daysOpen} days)`;
+        prompt += `\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Layer 4: Active Topics
+    if (context.topics?.length > 0) {
+      prompt += `## Active Topics\n`;
+      prompt += context.topics.map(t => `${t.name} (×${t.count})`).join(', ') + `\n\n`;
+    }
+
+    // Layer 5: Relevant Documents
+    if (context.documents?.length > 0) {
+      prompt += `## Relevant Documents\n`;
+      context.documents.forEach(doc => {
+        prompt += `\n${doc.title}:\n${doc.content}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Layer 6: Pending Actions
+    if (context.actionItems?.length > 0) {
+      prompt += `## Pending Actions\n`;
+      context.actionItems.forEach(a => {
+        prompt += `- [${a.status}] ${a.text}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Layer 7: Parallel Discussion Summaries
+    // These are summaries explicitly created by users to promote parallel discussion
+    // content into the main thread's context.
+    if (context.discussions?.length > 0) {
+      prompt += `## Parallel Discussion Summaries\n`;
+      context.discussions.forEach(disc => {
+        prompt += `\n[${disc.title}]\n${disc.summary}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // Layers 8 & 9 (current discussion summaries + messages) are added via constructMessages()
+    return prompt;
+  }
+
+  /**
+   * Legacy system prompt — unchanged behaviour
+   */
+  _buildLegacySystemPrompt(context) {
     let prompt = `You are CollabAI, a helpful AI assistant for team collaboration.
 
-Be conversational, concise, and natural. Answer questions directly without unnecessary formatting or structure. Use the context below to provide accurate, relevant responses.
-
-`;
+Be conversational, concise, and natural. Answer questions directly without unnecessary formatting or structure. Use the context below to provide accurate, relevant responses.\n\n`;
 
     if (context.project) {
       prompt += `Project: ${context.project.title}\n`;
-      if (context.project.description) {
-        prompt += `${context.project.description}\n`;
-      }
+      if (context.project.description) prompt += `${context.project.description}\n`;
+      prompt += `Members: ${context.project.memberCount} | Discussions: ${context.project.discussionCount} | Stage: ${context.project.stage}\n`;
     }
 
-    if (context.discussion && !context.discussion.isMain) {
-      prompt += `\nCurrent Discussion: ${context.discussion.title}\n`;
-      if (context.discussion.description) {
-        prompt += `${context.discussion.description}\n`;
-      }
+    if (context.discussion) {
+      prompt += `\nCurrent Discussion: ${context.discussion.title}`;
+      if (context.discussion.isMain) prompt += ` (main thread)`;
+      prompt += `\n`;
+      if (context.discussion.description) prompt += `${context.discussion.description}\n`;
     }
 
-    // Add cross-discussion context
-    if (context.discussions && context.discussions.length > 0) {
+    if (context.discussions?.length > 0) {
       prompt += `\n--- Other Project Discussions ---\n`;
       context.discussions.forEach(disc => {
         prompt += `\n[${disc.title}]\n${disc.summary}\n`;
       });
     }
 
-    // Add documents
-    if (context.documents.length > 0) {
+    if (context.documents?.length > 0) {
       prompt += `\n--- Project Documents ---\n`;
       context.documents.forEach(doc => {
         prompt += `\n${doc.title}:\n${doc.content}\n`;
       });
     }
 
-    // Add summaries
-    if (context.summaries.length > 0) {
+    if (context.summaries?.length > 0) {
       prompt += `\n--- Previous Summaries (This Discussion) ---\n`;
       context.summaries.forEach((summary, i) => {
         prompt += `${i + 1}. ${summary}\n`;
@@ -640,12 +887,16 @@ Be conversational, concise, and natural. Answer questions directly without unnec
       }
     ];
 
-    // Add conversation history if context provided
+    // Add conversation history
     if (context && context.recentMessages) {
       context.recentMessages.forEach(m => {
+        // Skip System messages — these are error notifications, not real conversation
+        if (m.user === 'System') return;
+
         if (m.user === 'CollabAI') {
           messages.push({ role: 'assistant', content: m.text });
         } else {
+          // Prefix with username so the AI knows who said what in multi-user chats
           messages.push({ role: 'user', content: `${m.user}: ${m.text}` });
         }
       });
@@ -671,82 +922,144 @@ Be conversational, concise, and natural. Answer questions directly without unnec
       projectId, 
       systemPrompt = null,
       temperature = 0.7,
-      maxTokens = 1024
+      maxTokens = null  // null = use provider default
     } = params;
 
-    const messages = this.constructMessages(context, prompt, systemPrompt);
+    // Per-provider sensible output token limits for chat responses
+    const providerMaxTokens = {
+      groq: 8192,
+      server: 8192,
+      openai: 4096,
+      anthropic: 8192,
+      google: 8192
+    };
+    const resolvedMaxTokens = maxTokens ?? (providerMaxTokens[provider] || 4096);
+
+    let messages = this.constructMessages(context, prompt, systemPrompt);
+
+    // Trim context if it exceeds model token limit before calling provider
+    const { messages: trimmedMessages } = TokenManager.trimContext(context, messages, model, requestId);
+    messages = trimmedMessages;
 
     // PHASE 4: Wrap with guardrails
     const result = await LLMGuardrails.guardedCall(
-      {
-        requestId,
-        provider,
-        model,
-        messages,
-        projectId
-      },
+      { requestId, provider, model, messages, projectId },
       async () => {
+        const apiKey = await this.getApiKey(provider, projectId);
         switch (provider) {
           case 'groq':
           case 'server':
-            return await this.callGroq({ model, messages, temperature, maxTokens });
-
+            return await this.callGroq({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
           case 'openai':
+            return await this.callOpenAI({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
           case 'anthropic':
+            return await this.callAnthropic({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
           case 'google':
-          case 'deepseek':
-            throw new Error(`${provider} integration coming soon. Currently only Groq is supported.`);
-
+            return await this.callGoogle({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
           default:
             throw new Error(`Unsupported provider: ${provider}`);
         }
       }
     );
 
-    // Return just the content for backward compatibility
     return result.content || result;
   }
 
   /**
    * Call Groq API
-   * PHASE 4: Now uses encrypted API keys and returns usage info
    */
-  async callGroq(params) {
-    const { model, messages, temperature, maxTokens } = params;
-
-    const apiKey = this.getServerGroqKey();
-    const client = new Groq({ apiKey });
-
+  async callGroq({ model, messages, temperature, maxTokens, apiKey }) {
+    const client = new Groq({ apiKey: apiKey || this.getServerGroqKey() });
     const completion = await client.chat.completions.create({
       model,
       messages,
       temperature,
       max_tokens: maxTokens
     });
-
     const content = completion.choices[0]?.message?.content || 'No response generated.';
-    const usage = completion.usage || null;
-
-    return { content, usage };
+    return { content, usage: completion.usage || null };
   }
 
   /**
-   * Get server Groq API key
-   * PHASE 4: Now uses encrypted keys
+   * Call OpenAI API
+   */
+  async callOpenAI({ model, messages, temperature, maxTokens, apiKey }) {
+    const client = new OpenAI({ apiKey });
+    const completion = await client.chat.completions.create({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens
+    });
+    const content = completion.choices[0]?.message?.content || 'No response generated.';
+    return { content, usage: completion.usage || null };
+  }
+
+  /**
+   * Call Anthropic API
+   * Anthropic uses a different message format — system prompt is a top-level param.
+   */
+  async callAnthropic({ model, messages, temperature, maxTokens, apiKey }) {
+    const client = new Anthropic({ apiKey });
+    // Extract system message (first message with role 'system')
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = messages.filter(m => m.role !== 'system');
+    const response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system: systemMsg?.content || '',
+      messages: chatMessages
+    });
+    const content = response.content[0]?.text || 'No response generated.';
+    return { content, usage: response.usage || null };
+  }
+
+  /**
+   * Call Google Gemini API
+   * Converts OpenAI-style messages to Gemini's format.
+   */
+  async callGoogle({ model, messages, temperature, maxTokens, apiKey }) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genAI.getGenerativeModel({
+      model,
+      generationConfig: { temperature, maxOutputTokens: maxTokens }
+    });
+
+    // Extract system prompt and build history
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = messages.filter(m => m.role !== 'system');
+
+    // Last message is the current user prompt
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    const history = chatMessages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+
+    // Prepend system prompt to first user message if present
+    let userPrompt = lastMsg?.content || '';
+    if (systemMsg?.content && history.length === 0) {
+      userPrompt = `${systemMsg.content}\n\n${userPrompt}`;
+    }
+
+    const chat = geminiModel.startChat({ history });
+    const result = await chat.sendMessage(userPrompt);
+    const content = result.response.text() || 'No response generated.';
+    return { content, usage: null };
+  }
+
+  /**
+   * Get server Groq API key (env var, decrypted if needed)
    */
   getServerGroqKey() {
     const encryptedKey = process.env.GROQ_API_KEY || process.env.CHATBOT_API_KEY;
-    if (!encryptedKey) {
-      throw new Error('Server AI API key not configured');
-    }
-    
-    // PHASE 4: Decrypt if encrypted
+    if (!encryptedKey) throw new Error('Server AI API key not configured');
     return EncryptionService.decryptForUse(encryptedKey);
   }
 
   /**
    * Estimate token count (simple length-based for now)
-   * TODO: Implement proper tokenization in future phase
    */
   estimateTokens(context, prompt) {
     let totalChars = 0;

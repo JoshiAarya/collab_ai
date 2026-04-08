@@ -13,24 +13,13 @@ const PROVIDERS = {
     ),
     color: '#10a37f',
     models: [
-      { id: 'gpt-5-1', name: 'gpt-5-1' },
-      { id: 'gpt-5-1-chat-latest', name: 'gpt-5-1-chat-latest' },
-      { id: 'gpt-5', name: 'gpt-5' },
-      { id: 'gpt-5-chat-latest', name: 'gpt-5-chat-latest' },
-      { id: 'gpt-5-mini', name: 'gpt-5-mini' },
-      { id: 'gpt-5-nano', name: 'gpt-5-nano' },
-      { id: 'gpt-5-pro', name: 'gpt-5-pro' },
-      { id: 'gpt-5-1-codex', name: 'gpt-5-1-codex' },
-      { id: 'gpt-5-codex', name: 'gpt-5-codex' },
-      { id: 'gpt-5-1-codex-mini', name: 'gpt-5-1-codex-mini' },
-      { id: 'codex-mini-latest', name: 'codex-mini-latest' },
-      { id: 'gpt-5-search-api', name: 'gpt-5-search-api' },
-      { id: 'gpt-4-1', name: 'gpt-4-1' },
-      { id: 'gpt-4o', name: 'gpt-4o' },
-      { id: 'gpt-4o-mini', name: 'gpt-4o-mini' },
-      { id: 'gpt-4-turbo', name: 'gpt-4-turbo' },
-      { id: 'gpt-4', name: 'gpt-4' },
-      { id: 'gpt-3.5-turbo', name: 'gpt-3.5-turbo' }
+      { id: 'gpt-4.1', name: 'GPT-4.1' },
+      { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+      { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+      { id: 'o3', name: 'o3' },
+      { id: 'o4-mini', name: 'o4-mini' }
     ]
   },
   anthropic: {
@@ -42,11 +31,9 @@ const PROVIDERS = {
     ),
     color: '#d4a574',
     models: [
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-      { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
-      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
-      { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
-      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
+      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
+      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+      { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' }
     ]
   },
   google: {
@@ -61,10 +48,10 @@ const PROVIDERS = {
     ),
     color: '#4285F4',
     models: [
-      { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro' }
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' }
     ]
   },
   deepseek: {
@@ -75,6 +62,7 @@ const PROVIDERS = {
       </svg>
     ),
     color: '#00a6fb',
+    comingSoon: true,
     models: [
       { id: 'deepseek-chat', name: 'DeepSeek Chat' },
       { id: 'deepseek-coder', name: 'DeepSeek Coder' }
@@ -88,8 +76,8 @@ const PROVIDERS = {
       </svg>
     ),
     color: '#ffffff',
+    comingSoon: true,
     models: [
-      { id: 'grok-beta', name: 'Grok Beta' },
       { id: 'grok-2-latest', name: 'Grok 2' }
     ]
   },
@@ -227,22 +215,27 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                 filteredProviders.map(([id, provider]) => (
                   <div 
                     key={id} 
-                    style={styles.providerRow}
-                    onClick={() => {
-                      // For server, select directly without showing models
-                      if (id === 'server') {
-                        handleModelSelect('server', 'server');
-                      }
+                    style={{
+                      ...styles.providerRow,
+                      opacity: provider.comingSoon ? 0.45 : 1,
+                      cursor: provider.comingSoon ? 'default' : 'pointer'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onClick={() => {
+                      if (provider.comingSoon) return;
+                      if (id === 'server') handleModelSelect('server', 'server');
+                    }}
+                    onMouseEnter={(e) => { if (!provider.comingSoon) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
                     <span style={{...styles.providerIcon, color: provider.color}}>{provider.icon}</span>
                     <span style={{...styles.providerName, color: colors.text}}>{provider.name}</span>
+                    {provider.comingSoon && (
+                      <span style={styles.comingSoonBadge}>soon</span>
+                    )}
                     <div style={{ flex: 1 }} />
                     
-                    {/* Settings icon - only for non-server providers */}
-                    {id !== 'server' && (
+                    {/* Settings icon - only for non-server, non-dummy providers */}
+                    {id !== 'server' && !provider.comingSoon && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -257,8 +250,8 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                       </button>
                     )}
 
-                    {/* Arrow icon - only for non-server providers */}
-                    {id !== 'server' && (
+                    {/* Arrow icon - only for non-server, non-dummy providers */}
+                    {id !== 'server' && !provider.comingSoon && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -291,6 +284,8 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                           ? 'rgba(16, 163, 127, 0.1)' 
                           : 'transparent'
                       }}
+                      onMouseEnter={(e) => { if (!(currentModel.provider === selectedProvider && currentModel.model === model.id)) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                      onMouseLeave={(e) => { if (!(currentModel.provider === selectedProvider && currentModel.model === model.id)) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <span style={{...styles.modelName, color: colors.text}}>{model.name}</span>
                       {currentModel.provider === selectedProvider && currentModel.model === model.id && (
@@ -323,6 +318,12 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
               <p style={{...styles.modalDesc, color: colors.textSecondary}}>
                 {apiKeyProvider === 'server' 
                   ? 'Server uses the backend AI. No configuration needed.'
+                  : apiKeyProvider === 'openai'
+                  ? 'Get your API key from platform.openai.com. Your key is stored encrypted per project.'
+                  : apiKeyProvider === 'anthropic'
+                  ? 'Get your API key from console.anthropic.com. Your key is stored encrypted per project.'
+                  : apiKeyProvider === 'google'
+                  ? 'Get your API key from aistudio.google.com. Your key is stored encrypted per project.'
                   : `Enter your ${PROVIDERS[apiKeyProvider]?.name} API key to use their models.`
                 }
               </p>
@@ -445,6 +446,16 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     transition: 'color 0.2s'
+  },
+  comingSoonBadge: {
+    fontSize: '10px',
+    fontWeight: '600',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    background: 'rgba(139,92,246,0.2)',
+    color: '#8b5cf6',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase'
   },
   backButton: {
     display: 'flex',

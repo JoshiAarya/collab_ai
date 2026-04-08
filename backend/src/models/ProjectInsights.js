@@ -10,9 +10,7 @@ const projectInsightsSchema = new mongoose.Schema({
   projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: true,
-    unique: true,
-    index: true
+    required: true
   },
   topics: [{
     name: {
@@ -89,7 +87,7 @@ const projectInsightsSchema = new mongoose.Schema({
 });
 
 // Indexes for efficient querying
-projectInsightsSchema.index({ projectId: 1 });
+projectInsightsSchema.index({ projectId: 1 }, { unique: true });
 projectInsightsSchema.index({ lastUpdated: -1 });
 
 export default mongoose.model('ProjectInsights', projectInsightsSchema);

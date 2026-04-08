@@ -7,6 +7,12 @@ import summaryService from '../services/summaryService.js';
 import aiService from '../services/aiService.js';
 import ProjectInsights from '../models/ProjectInsights.js';
 import StrategicSignalEngine from '../core/intelligence/StrategicSignalEngine.js';
+// Entity knowledge model
+import Topic from '../models/Topic.js';
+import Decision from '../models/Decision.js';
+import Blocker from '../models/Blocker.js';
+import ActionItem from '../models/ActionItem.js';
+import ProjectState from '../models/ProjectState.js';
 
 const router = express.Router();
 
@@ -288,7 +294,24 @@ router.get('/:projectId/discussions', async (req, res) => {
     }
 
     const discussions = await discussionService.getProjectDiscussions(projectId);
-    res.json({ success: true, discussions });
+
+    // Attach latest summary metadata to each non-main discussion so the
+    // frontend can show stale indicators without extra round-trips.
+    const enriched = await Promise.all(discussions.map(async (disc) => {
+      if (disc.isMain) return disc;
+      const latestSummaries = await summaryService.getDiscussionSummaries(disc._id, 1);
+      const latest = latestSummaries[0] || null;
+      return {
+        ...disc,
+        latestSummary: latest ? {
+          _id: latest._id,
+          createdAt: latest.createdAt,
+          messageCountAtSummary: latest.messageCountAtSummary || 0
+        } : null
+      };
+    }));
+
+    res.json({ success: true, discussions: enriched });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -510,6 +533,15 @@ router.post('/:projectId/discussions/:discussionId/summarize', async (req, res) 
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
+    // Prevent summarizing the main discussion
+    const discussion = await discussionService.getDiscussionById(discussionId);
+    if (!discussion) {
+      return res.status(404).json({ success: false, error: 'Discussion not found' });
+    }
+    if (discussion.isMain) {
+      return res.status(400).json({ success: false, error: 'Cannot summarize the main thread' });
+    }
+
     const project = await projectService.getProjectById(projectId);
     const summaryContent = await aiService.generateSummary(
       projectId,
@@ -518,13 +550,47 @@ router.post('/:projectId/discussions/:discussionId/summarize', async (req, res) 
       customPrompt
     );
 
+    // Capture message count at time of summarization
+    const messageCountAtSummary = discussion.messageCount || 0;
+
     const summary = await summaryService.createSummary(
       projectId,
       discussionId,
       summaryContent,
       'discussion',
-      project.activeLLM.provider
+      project.activeLLM.provider,
+      messageCountAtSummary
     );
+
+    // Trigger intelligence pipeline on the summary content so parallel discussion
+    // ideas enter the knowledge model only when explicitly promoted via summary.
+    try {
+      const InsightExtractor = (await import('../core/intelligence/InsightExtractor.js')).default;
+      const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
+      const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
+
+      const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
+      const extracted = await InsightExtractor.extractFromMessage({
+        projectId,
+        discussionId,
+        messageId: summary._id,
+        text: summaryContent,
+        username: 'Thread Summary',
+        isAI: false,
+        llmConfig,
+        callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator),
+        bypassRateLimit: true
+      });
+
+      await KnowledgeAggregator.mergeInsights({
+        projectId,
+        discussionId,
+        extracted: { ...extracted, messageId: summary._id }
+      });
+    } catch (pipelineErr) {
+      // Non-critical — summary is already saved
+      console.warn('Pipeline on summary failed (non-critical):', pipelineErr.message);
+    }
 
     res.json({ success: true, summary });
   } catch (error) {
@@ -589,151 +655,354 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// Get dashboard insights (owner only)
-// PHASE 3: Now uses persistent ProjectInsights with LLM fallback
-// PHASE 5: Now includes strategic signals
-router.get('/:projectId/dashboard', async (req, res) => {
+
+// --- Signal review routes ---
+router.get('/:projectId/signals/pending', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
+    const signals = await SignalBuffer.getPendingSignals(projectId);
+    res.json({ success: true, signals });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:projectId/signals/:signalId/confirm', async (req, res) => {
+  try {
+    const { projectId, signalId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
+    const SignalNormalizer = (await import('../core/extraction/SignalNormalizer.js')).default;
+    const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
+
+    const confirmed = await SignalBuffer.confirmSignal(signalId);
+    if (!confirmed) return res.status(404).json({ success: false, error: 'Signal not found' });
+
+    const normalized = await SignalNormalizer.normalize(confirmed);
+    await KnowledgeAggregator.mergeInsights({ projectId, discussionId: confirmed.discussionId, extracted: normalized });
+
+    res.json({ success: true, signal: confirmed, entity: normalized });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:projectId/signals/:signalId/dismiss', async (req, res) => {
+  try {
+    const { projectId, signalId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
+    await SignalBuffer.dismissSignal(signalId);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Force-refresh dashboard: re-runs extraction on main thread, then returns fresh dashboard
+router.post('/:projectId/dashboard/refresh', async (req, res) => {
   try {
     const { projectId } = req.params;
 
     const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
     if (!isOwner) {
-      return res.status(403).json({ success: false, error: 'Only owner can view dashboard' });
+      return res.status(403).json({ success: false, error: 'Only owner can refresh dashboard' });
     }
 
-    // Get stats
+    const project = await projectService.getProjectById(projectId);
     const discussions = await discussionService.getProjectDiscussions(projectId);
-    const documents = await documentService.getProjectDocuments(projectId);
-    
-    let totalMessages = 0;
-    for (const disc of discussions) {
-      const messages = await discussionService.getDiscussionMessages(disc._id);
-      totalMessages += messages.length;
+    const mainDiscussion = discussions.find(d => d.isMain);
+
+    if (mainDiscussion) {
+      try {
+        const InsightExtractor = (await import('../core/intelligence/InsightExtractor.js')).default;
+        const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
+        const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
+
+        const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
+        const extracted = await InsightExtractor.forceExtractForProject({
+          projectId,
+          discussionId: mainDiscussion._id,
+          llmConfig,
+          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+        });
+
+        await KnowledgeAggregator.mergeInsights({
+          projectId,
+          discussionId: mainDiscussion._id,
+          extracted
+        });
+      } catch (pipelineErr) {
+        console.warn('Force extraction failed (non-critical):', pipelineErr.message);
+      }
     }
 
-    // PHASE 3: Try to get persistent insights first
-    let insights = await ProjectInsights.findOne({ projectId }).lean();
+    // Return fresh dashboard after extraction
+    const result = await buildDashboardResponse(projectId);
+    return res.json({ success: true, dashboard: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-    // PHASE 5: Generate strategic signals (computed dynamically)
-    const signals = await StrategicSignalEngine.generateSignals({ projectId });
+// Get dashboard insights (owner only)
+// Reads from entity model if available, falls back to ProjectInsights, then LLM.
+router.get('/:projectId/dashboard', async (req, res) => {
+  try {
+    const { projectId } = req.params;
 
-    // Calculate activity for last 7 days and participant contributions
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const dashboard = await buildDashboardResponse(projectId);
+    return res.json({ success: true, dashboard });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Shared dashboard builder — used by both GET and POST /refresh
+// ---------------------------------------------------------------------------
+async function buildDashboardResponse(projectId) {
+    // --- Shared metrics (always computed regardless of source) ---
+    const [discussions, documents] = await Promise.all([
+      discussionService.getProjectDiscussions(projectId),
+      documentService.getProjectDocuments(projectId)
+    ]);
+
+    // Load all messages once to avoid repeated queries
+    const allDiscMessages = await Promise.all(
+      discussions.map(d => discussionService.getDiscussionMessages(d._id))
+    );
+
+    let totalMessages = 0;
     const activityByDay = Array(7).fill(0);
     const participantStats = {};
     const discussionStats = [];
-    
-    for (const disc of discussions) {
-      const messages = await discussionService.getDiscussionMessages(disc._id);
-      const discMessageCount = messages.length;
-      
-      discussionStats.push({
-        title: disc.title,
-        count: discMessageCount,
-        isMain: disc.isMain
-      });
-      
+    let userMessages = 0;
+    let aiMessages = 0;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    discussions.forEach((disc, i) => {
+      const messages = allDiscMessages[i];
+      totalMessages += messages.length;
+      discussionStats.push({ title: disc.title, count: messages.length, isMain: disc.isMain });
+
       messages.forEach(msg => {
-        // Activity by day
+        if (msg.isAI) aiMessages++;
+        else userMessages++;
+
         const msgDate = new Date(msg.timestamp);
         if (msgDate >= sevenDaysAgo) {
-          const daysAgo = Math.floor((Date.now() - msgDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysAgo < 7) {
-            activityByDay[6 - daysAgo]++;
-          }
+          const daysAgo = Math.floor((Date.now() - msgDate.getTime()) / 86400000);
+          if (daysAgo < 7) activityByDay[6 - daysAgo]++;
         }
-        
-        // Participant contributions
+
         const username = msg.user?.username || msg.user || 'Unknown';
         if (!msg.isAI && username !== 'Unknown') {
           participantStats[username] = (participantStats[username] || 0) + 1;
         }
       });
-    }
-    
+    });
+
     const topParticipants = Object.entries(participantStats)
       .map(([username, count]) => ({ username, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-    
-    const topDiscussions = discussionStats
+
+    const topDiscussions = [...discussionStats]
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-    
-    // Calculate message type breakdown
-    let userMessages = 0;
-    let aiMessages = 0;
-    for (const disc of discussions) {
-      const messages = await discussionService.getDiscussionMessages(disc._id);
-      messages.forEach(msg => {
-        if (msg.isAI) aiMessages++;
-        else userMessages++;
-      });
-    }
-    
-    // Filter function for cleaning up insights
-    const filterGarbage = (items) => {
-      if (!items || !Array.isArray(items)) return [];
-      return items.filter(item => {
-        const text = (typeof item === 'string' ? item : item.text || '').toLowerCase().trim();
-        if (!text || text.length < 10) return false;
-        const garbage = ['none', 'none mentioned', 'no blockers', 'n/a', 'invalid token', 'access denied', 'discuss', 'decide on'];
-        return !garbage.some(g => text.includes(g));
-      });
+
+    const sharedMetrics = {
+      totalMessages,
+      activeDiscussions: discussions.length,
+      documentCount: documents.length,
+      activity: activityByDay,
+      participants: topParticipants,
+      discussionBreakdown: topDiscussions,
+      messageTypes: { user: userMessages, ai: aiMessages }
     };
 
-    if (insights) {
-      // Use persistent insights (fast, deterministic)
-      const dashboard = {
-        totalMessages,
-        activeDiscussions: discussions.length,
-        documentCount: documents.length,
-        topics: insights.topics.map(t => t.name).slice(0, 8) || [],
-        decisions: filterGarbage(insights.decisions.map(d => d.text)).slice(0, 8) || [],
-        openQuestions: filterGarbage(insights.blockers.filter(b => !b.resolved).map(b => b.text)).slice(0, 8) || [],
-        actionItems: filterGarbage(insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text)).slice(0, 8) || [],
-        projectSummary: insights.projectSummary || '',
-        lastUpdated: insights.lastUpdated,
-        source: 'persistent',
-        signals,
-        activity: activityByDay,
-        stage: insights.stage || 'ideation',
-        participants: topParticipants,
-        discussionBreakdown: topDiscussions,
-        messageTypes: { user: userMessages, ai: aiMessages }
-      };
+    // Strategic signals — always computed
+    const signals = await StrategicSignalEngine.generateSignals({ projectId });
 
-      res.json({ success: true, dashboard });
-    } else {
-      // Fallback to LLM generation (first time or no data yet)
-      const project = await projectService.getProjectById(projectId);
-      const llmInsights = await aiService.generateDashboardInsights(projectId, project.activeLLM);
-      
-      const dashboard = {
-        totalMessages,
-        activeDiscussions: discussions.length,
-        documentCount: documents.length,
-        topics: filterGarbage(llmInsights.topics || []).slice(0, 8),
-        decisions: filterGarbage(llmInsights.decisions || []).slice(0, 8),
-        openQuestions: filterGarbage(llmInsights.blockers || []).slice(0, 8),
-        actionItems: filterGarbage(llmInsights.nextSteps || []).slice(0, 8),
-        projectSummary: llmInsights.projectSummary || '',
-        source: 'llm-generated',
-        signals,
-        activity: activityByDay,
-        stage: llmInsights.stage || 'ideation',
-        participants: topParticipants,
-        discussionBreakdown: topDiscussions,
-        messageTypes: { user: userMessages, ai: aiMessages }
-      };
+    // --- Route to correct data source ---
+    const hasEntityModel = await ProjectState.exists({ projectId });
 
-      res.json({ success: true, dashboard });
+    if (hasEntityModel) {
+      return buildEntityDashboard(projectId, sharedMetrics, signals);
     }
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+
+    // Legacy: ProjectInsights
+    const insights = await ProjectInsights.findOne({ projectId }).lean();
+    if (insights) {
+      return buildLegacyDashboard(insights, sharedMetrics, signals);
+    }
+
+    // Last resort: LLM generation
+    const project = await projectService.getProjectById(projectId);
+    const llmInsights = await aiService.generateDashboardInsights(projectId, project.activeLLM);
+    return buildLLMDashboard(llmInsights, sharedMetrics, signals);
+}
+
+// ---------------------------------------------------------------------------
+// Entity model dashboard builder
+// ---------------------------------------------------------------------------
+async function buildEntityDashboard(projectId, sharedMetrics, signals) {
+  const [projectState, topics, decisions, blockers, actionItems, supersededDecisions] = await Promise.all([
+    ProjectState.findOne({ projectId }).lean(),
+    Topic.find({ projectId, status: 'stable' }).sort({ count: -1 }).limit(8).lean(),
+    Decision.find({ projectId, status: 'active', needsHumanValidation: { $ne: true } }).sort({ occurrenceCount: -1, createdAt: -1 }).limit(12).lean(),
+    // Show all unresolved blockers — single-instance ones from summaries are real and must be visible
+    Blocker.find({ projectId, resolved: false }).sort({ severity: -1, occurrenceCount: -1, createdAt: -1 }).limit(10).lean(),
+    ActionItem.find({ projectId, status: { $ne: 'completed' } }).sort({ occurrenceCount: -1, createdAt: -1 }).limit(10).lean(),
+    Decision.find({ projectId, status: 'superseded' }).sort({ updatedAt: -1 }).limit(5).lean()
+  ]);
+
+  // Build topic name lookup for enrichment
+  const topicNameMap = {};
+  topics.forEach(t => { topicNameMap[t._id.toString()] = t.name; });
+
+  const now = Date.now();
+
+  // Enrich decisions with topicName + rationale
+  const enrichedDecisions = decisions.map(d => ({
+    text: d.text,
+    rationale: d.rationale || '',
+    topicId: d.topicId,
+    topicName: d.topicId ? (topicNameMap[d.topicId.toString()] || '') : '',
+    timestamp: d.timestamp,
+    proposedBy: d.proposedBy?.username || null
+  }));
+
+  // Enrich blockers with daysOpen + topicName
+  const enrichedBlockers = blockers.map(b => ({
+    text: b.text,
+    severity: b.severity,
+    resolved: b.resolved,
+    topicName: b.topicId ? (topicNameMap[b.topicId.toString()] || '') : '',
+    daysOpen: b.raisedAt
+      ? Math.floor((now - new Date(b.raisedAt).getTime()) / 86400000)
+      : 0,
+    proposedBy: b.proposedBy?.username || null
+  }));
+
+  // Enrich action items with assignee
+  const enrichedActions = actionItems.map(a => ({
+    text: a.text,
+    status: a.status,
+    assignee: a.assignee || null,
+    topicName: a.topicId ? (topicNameMap[a.topicId.toString()] || '') : '',
+    proposedBy: a.proposedBy?.username || null
+  }));
+
+  // Enrich superseded decisions with what replaced them
+  const enrichedSuperseded = await Promise.all(supersededDecisions.map(async d => {
+    let supersededByText = null;
+    if (d.supersededBy) {
+      const newDecision = await Decision.findById(d.supersededBy).select('text').lean();
+      supersededByText = newDecision?.text || null;
+    }
+    return {
+      text: d.text,
+      supersededByText,
+      timestamp: d.timestamp,
+      topicName: d.topicId ? (topicNameMap[d.topicId.toString()] || '') : ''
+    };
+  }));
+
+  return {
+    source: 'entity-model',
+    topics: topics.map(t => ({ name: t.name, count: t.count })),
+    decisions: enrichedDecisions.map(d => d.text),
+    openQuestions: enrichedBlockers.filter(b => !b.resolved).map(b => b.text),
+    actionItems: enrichedActions.filter(a => a.status !== 'completed').map(a => a.text),
+    stage: projectState?.stage || 'ideation',
+    projectSummary: projectState?.summary || '',
+    lastUpdated: projectState?.lastUpdated || null,
+    enrichedDecisions,
+    enrichedBlockers,
+    enrichedActions,
+    enrichedSuperseded,
+    projectState: projectState ? {
+      stage: projectState.stage,
+      stageReason: projectState.stageReason,
+      summary: projectState.summary,
+      momentum: projectState.momentum,
+      openBlockerCount: projectState.openBlockerCount,
+      unresolvedActionCount: projectState.unresolvedActionCount,
+      activeTopicCount: projectState.activeTopicCount,
+      lastDecisionAt: projectState.lastDecisionAt
+    } : null,
+    signals,
+    ...sharedMetrics
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy ProjectInsights dashboard builder (unchanged behaviour)
+// ---------------------------------------------------------------------------
+function buildLegacyDashboard(insights, sharedMetrics, signals) {
+  const filterGarbage = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items.filter(item => {
+      const text = (typeof item === 'string' ? item : item?.text || '').toLowerCase().trim();
+      if (!text || text.length < 10) return false;
+      const garbage = ['none', 'none mentioned', 'no blockers', 'n/a', 'invalid token', 'access denied', 'discuss', 'decide on'];
+      return !garbage.some(g => text.includes(g));
+    });
+  };
+
+  return {
+    source: 'persistent',
+    topics: insights.topics.map(t => t.name).slice(0, 8),
+    decisions: filterGarbage(insights.decisions.map(d => d.text)).slice(0, 8),
+    openQuestions: filterGarbage(insights.blockers.filter(b => !b.resolved).map(b => b.text)).slice(0, 8),
+    actionItems: filterGarbage(insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text)).slice(0, 8),
+    projectSummary: insights.projectSummary || '',
+    stage: insights.stage || 'ideation',
+    lastUpdated: insights.lastUpdated,
+    signals,
+    ...sharedMetrics
+  };
+}
+
+// ---------------------------------------------------------------------------
+// LLM fallback dashboard builder (first-time, no data)
+// ---------------------------------------------------------------------------
+function buildLLMDashboard(llmInsights, sharedMetrics, signals) {
+  const filterGarbage = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items.filter(item => {
+      const text = (typeof item === 'string' ? item : '').toLowerCase().trim();
+      return text && text.length >= 10;
+    });
+  };
+
+  return {
+    source: 'llm-generated',
+    topics: filterGarbage(llmInsights.topics || []).slice(0, 8),
+    decisions: filterGarbage(llmInsights.decisions || []).slice(0, 8),
+    openQuestions: filterGarbage(llmInsights.blockers || []).slice(0, 8),
+    actionItems: filterGarbage(llmInsights.nextSteps || []).slice(0, 8),
+    projectSummary: llmInsights.projectSummary || '',
+    stage: llmInsights.stage || 'ideation',
+    signals,
+    ...sharedMetrics
+  };
+}
 
 export default router;

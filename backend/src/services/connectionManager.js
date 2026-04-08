@@ -10,6 +10,11 @@ import authService from './authService.js';
 import projectService from './projectService.js';
 import discussionService from './discussionService.js';
 import aiService from './aiService.js';
+import InsightExtractor from '../core/intelligence/InsightExtractor.js';
+import KnowledgeAggregator from '../core/intelligence/KnowledgeAggregator.js';
+import SignalClassifier from '../core/extraction/SignalClassifier.js';
+import SignalBuffer from '../core/extraction/SignalBuffer.js';
+import SignalNormalizer from '../core/extraction/SignalNormalizer.js';
 
 class ConnectionManager {
   constructor() {
@@ -252,6 +257,9 @@ class ConnectionManager {
         messageLength: text.length 
       });
 
+      // Async extraction from user message — non-blocking, fail-safe
+      this._processMessageForSignals(message, projectId, discussionId).catch(() => {});
+
       // Check for AI invocation
       if (text.startsWith('@CollabAI')) {
         const meta = this.clients.get(ws);
@@ -452,6 +460,104 @@ class ConnectionManager {
 
     limit.count++;
     return true;
+  }
+
+  async _processMessageForSignals(message, projectId, discussionId) {
+    // Skip AI messages
+    if (message.isAI) return;
+    // Skip @CollabAI queries
+    if (message.text && message.text.startsWith('@CollabAI')) return;
+    
+    const signal = SignalClassifier.classify(message);
+    if (!signal) return; // Tier 3, discard
+    
+    const pending = await SignalBuffer.addSignal(projectId, discussionId, signal);
+    
+    if (signal.tier === 1) {
+      // Auto-capture immediately, no user action needed
+      const normalized = await SignalNormalizer.normalize(signal);
+      await KnowledgeAggregator.mergeInsights({ projectId, discussionId, extracted: normalized });
+      await SignalBuffer.autoCapture(pending._id);
+      
+      // Emit to dashboard WebSocket: subtle "auto-captured" indicator
+      this.broadcastToDiscussion(discussionId, { type: 'signal_auto_captured', signal: normalized });
+    } else {
+      // Tier 2: wait for review
+      const count = await SignalBuffer.getPendingCount(projectId);
+      this.broadcastToDiscussion(discussionId, { type: 'signal_pending', count });
+    }
+  }
+
+  /**
+   * Async extraction from any message — non-blocking, fail-safe
+   * Only runs on the MAIN discussion. Parallel discussions feed the knowledge
+   * model exclusively via summaries (see summarize route in projects.js).
+   */
+  async _triggerExtractionForMessage(message, projectId, discussionId) {
+    // Task 7: failure isolation — outer catch ensures nothing escapes
+    try {
+      if (!message.text || message.text.length < 30) return;
+      if (message.text.startsWith('@CollabAI')) return;
+
+      // Only extract from the main discussion thread
+      const { default: DiscussionModel } = await import('../models/Discussion.js');
+      const discussion = await DiscussionModel.findById(discussionId).select('isMain').lean();
+      if (!discussion?.isMain) return;
+
+      const messageId = message._id;
+
+      // Task 1: EXTRACTION_STARTED
+      logger.ai('EXTRACTION_STARTED', { projectId, discussionId, messageId, source: message.isAI ? 'ai' : 'user' });
+
+      const project = await projectService.getProjectById(projectId);
+      if (!project) return;
+
+      const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
+      const { default: AIOrchestrator } = await import('../core/orchestrator/AIOrchestrator.js');
+
+      // Task 9: EXTRACTION_TIME_MS
+      const extractStart = Date.now();
+      const extracted = await InsightExtractor.extractFromMessage({
+        projectId,
+        discussionId,
+        messageId,
+        text: message.text,
+        username: message.user,
+        isAI: message.isAI || false,
+        llmConfig,
+        callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+      });
+      const extractionMs = Date.now() - extractStart;
+
+      // Task 1: EXTRACTION_RESULT
+      logger.ai('EXTRACTION_RESULT', {
+        projectId,
+        discussionId,
+        messageId,
+        topics: extracted.topics?.length || 0,
+        decisions: extracted.decisions?.length || 0,
+        blockers: extracted.blockers?.length || 0,
+        actionItems: extracted.actionItems?.length || 0,
+        EXTRACTION_TIME_MS: extractionMs
+      });
+
+      // Task 9: AGGREGATION_TIME_MS
+      const aggStart = Date.now();
+      await KnowledgeAggregator.mergeInsights({
+        projectId,
+        discussionId,
+        extracted: { ...extracted, messageId }
+      });
+      logger.ai('AGGREGATION_TIME_MS', { projectId, messageId, ms: Date.now() - aggStart });
+
+    } catch (error) {
+      // Task 7: log but never propagate — message delivery already succeeded
+      logger.warn('EXTRACTION_PIPELINE_FAILED (non-critical)', {
+        messageId: message._id,
+        projectId,
+        error: error.message
+      });
+    }
   }
 
   /**

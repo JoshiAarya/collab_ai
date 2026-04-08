@@ -1,5 +1,6 @@
 import Discussion from '../models/Discussion.js';
 import Message from '../models/Message.js';
+import '../models/User.js'; // ensure User schema is registered for populate('participants')
 
 class DiscussionService {
   // Get project discussions

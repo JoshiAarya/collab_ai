@@ -14,20 +14,40 @@ class LLMGuardrails {
       'groq': [
         'llama-3.1-8b-instant',
         'llama-3.1-70b-versatile',
+        'llama-3.3-70b-versatile',
         'llama-3.1-405b-reasoning',
         'mixtral-8x7b-32768',
-        'gemma-7b-it'
+        'gemma-7b-it',
+        'gemma2-9b-it'
       ],
       'server': [
         'llama-3.1-8b-instant',
-        'llama-3.1-70b-versatile'
+        'llama-3.1-70b-versatile',
+        'llama-3.3-70b-versatile'
       ],
-      'openai': ['gpt-4', 'gpt-3.5-turbo', 'gpt-4-turbo'],
-      'anthropic': ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
-      'google': ['gemini-pro', 'gemini-ultra']
+      'openai': [
+        'gpt-4.1',
+        'gpt-4.1-mini',
+        'gpt-4.1-nano',
+        'gpt-4o',
+        'gpt-4o-mini',
+        'o3',
+        'o4-mini'
+      ],
+      'anthropic': [
+        'claude-opus-4-6',
+        'claude-sonnet-4-6',
+        'claude-haiku-4-5-20251001'
+      ],
+      'google': [
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite'
+      ]
     };
 
-    this.maxTimeoutMs = 30000; // 30 seconds
+    this.maxTimeoutMs = 90000; // 90 seconds — Gemini 2.5 Pro / Claude Opus can take 45-60s
     this.retryableErrors = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND'];
   }
 
@@ -153,7 +173,7 @@ class LLMGuardrails {
 
     // Rate limit errors
     if (message.includes('rate limit') || message.includes('429')) {
-      return { category: 'rate_limit', retryable: false };
+      return { category: 'rate_limit', retryable: true };
     }
 
     // Authentication errors
@@ -203,8 +223,9 @@ class LLMGuardrails {
 
         // Only retry if error is retryable and this is first attempt
         if (attempt === 1 && errorInfo.retryable) {
-          logger.info('Retrying LLM call', { requestId });
-          await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay
+          const delayMs = errorInfo.category === 'rate_limit' ? 3000 : 1000;
+          logger.info('Retrying LLM call', { requestId, delayMs });
+          await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
         }
 

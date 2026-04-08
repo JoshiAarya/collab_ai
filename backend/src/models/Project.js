@@ -53,8 +53,7 @@ const projectSchema = new mongoose.Schema({
     default: 'ideation'
   },
   inviteCode: {
-    type: String,
-    sparse: true
+    type: String
   }
 }, {
   timestamps: true

@@ -31,6 +31,12 @@ const summarySchema = new mongoose.Schema({
   embedding: {
     type: [Number],
     default: null
+  },
+  // How many messages the discussion had when this summary was created.
+  // Used to detect stale summaries (discussion grew significantly after summarizing).
+  messageCountAtSummary: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true

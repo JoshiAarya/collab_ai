@@ -2,7 +2,7 @@ import Summary from '../models/Summary.js';
 
 class SummaryService {
   // Create summary
-  async createSummary(projectId, discussionId, content, type = 'discussion', generatedBy = 'server') {
+  async createSummary(projectId, discussionId, content, type = 'discussion', generatedBy = 'server', messageCountAtSummary = 0) {
     try {
       const summary = new Summary({
         projectId,
@@ -10,6 +10,7 @@ class SummaryService {
         content,
         type,
         generatedBy,
+        messageCountAtSummary,
         messageRange: {
           start: new Date(),
           end: new Date()

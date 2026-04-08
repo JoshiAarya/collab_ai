@@ -4,8 +4,7 @@ const discussionSchema = new mongoose.Schema({
   projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: true,
-    index: true
+    required: true
   },
   title: {
     type: String,
@@ -24,8 +23,7 @@ const discussionSchema = new mongoose.Schema({
   parentDiscussionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Discussion',
-    default: null,
-    index: true
+    default: null
   },
   branchDepth: {
     type: Number,

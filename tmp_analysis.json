@@ -1,0 +1,1562 @@
+{
+  "frontend/src/App.jsx": {
+    "size": 16371,
+    "lines": 544,
+    "functions": [
+      "AppContent",
+      "fetchInviteProjectInfo",
+      "handleAutoJoin",
+      "handleDeclineInvite",
+      "InviteConfirmModal",
+      "fetchInviteInfo",
+      "App"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function App() {"
+    ]
+  },
+  "frontend/src/components/Auth.jsx": {
+    "size": 7794,
+    "lines": 281,
+    "functions": [
+      "Auth",
+      "handleSubmit",
+      "handleGoogleLogin"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function Auth() {"
+    ]
+  },
+  "frontend/src/components/BlockerTracker.jsx": {
+    "size": 3633,
+    "lines": 110,
+    "functions": [
+      "BlockerTracker"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function BlockerTracker({ enrichedBlockers, colors }) {"
+    ]
+  },
+  "frontend/src/components/Dashboard.jsx": {
+    "size": 30957,
+    "lines": 650,
+    "functions": [
+      "formatDate",
+      "getValidBlockers",
+      "Dashboard",
+      "loadDashboard",
+      "refreshDashboard",
+      "Card",
+      "MetricCard",
+      "SummaryRow",
+      "Empty"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function Dashboard({ project, onClose, token, colors }) {"
+    ]
+  },
+  "frontend/src/components/DecisionTimeline.jsx": {
+    "size": 4131,
+    "lines": 120,
+    "functions": [
+      "DecisionTimeline",
+      "formatDate"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function DecisionTimeline({ enrichedDecisions, colors }) {"
+    ]
+  },
+  "frontend/src/components/ModelSelector.jsx": {
+    "size": 21567,
+    "lines": 579,
+    "functions": [
+      "ModelSelector",
+      "handleModelSelect",
+      "handleApiKeySubmit"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function ModelSelector({ currentModel, onModelChange, projectId, token, colors = {"
+    ]
+  },
+  "frontend/src/components/Onboarding.jsx": {
+    "size": 5369,
+    "lines": 196,
+    "functions": [
+      "Onboarding",
+      "handleNext",
+      "handleSkip"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function Onboarding({ onComplete }) {"
+    ]
+  },
+  "frontend/src/components/ProfileModal.jsx": {
+    "size": 13206,
+    "lines": 454,
+    "functions": [
+      "ProfileModal",
+      "loadStats",
+      "handleUpdateProfile",
+      "handleChangePassword",
+      "getStyles"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function ProfileModal({ onClose }) {"
+    ]
+  },
+  "frontend/src/components/ProjectIntelligenceCard.jsx": {
+    "size": 4130,
+    "lines": 128,
+    "functions": [
+      "ProjectIntelligenceCard",
+      "formatDate"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function ProjectIntelligenceCard({ projectState, colors }) {"
+    ]
+  },
+  "frontend/src/components/ProjectList.jsx": {
+    "size": 28486,
+    "lines": 907,
+    "functions": [
+      "ProjectList",
+      "loadProjects",
+      "CreateProjectModal",
+      "handleSubmit",
+      "handleSendInviteEmail",
+      "handleDone",
+      "JoinProjectModal",
+      "handleSubmit",
+      "handleSuccess"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function ProjectList({ onSelectProject }) {"
+    ]
+  },
+  "frontend/src/components/ProjectWorkspace.jsx": {
+    "size": 153287,
+    "lines": 4509,
+    "functions": [
+      "ProjectWorkspace",
+      "loadDiscussions",
+      "connectWebSocket",
+      "switchDiscussion",
+      "sendMessage",
+      "handleKeyDown",
+      "insertMention",
+      "getMentionOptions",
+      "relativeTime",
+      "MessageBubble",
+      "CreateDiscussionModal",
+      "InviteToDiscussionModal",
+      "loadData",
+      "handleAddMember",
+      "handleCopyLink",
+      "handleSendEmail",
+      "_DashboardLegacy",
+      "loadDashboard",
+      "refreshDashboard",
+      "getStageColor",
+      "getSeverityColor",
+      "formatTimestamp",
+      "getValidBlockers",
+      "Documents",
+      "loadDocuments",
+      "uploadDocument",
+      "Settings",
+      "copyInviteCode",
+      "handleSendInviteEmail",
+      "Summaries",
+      "loadSummaries",
+      "generateSummary",
+      "regenerateSummary",
+      "deleteSummary",
+      "AllDiscussionSummaries",
+      "loadAll",
+      "relativeTime"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function ProjectWorkspace({ project, onBack }) {"
+    ]
+  },
+  "frontend/src/components/shared/ErrorBoundary.jsx": {
+    "size": 4037,
+    "lines": 167,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class ErrorBoundary extends React.Component {"
+    ],
+    "models": [],
+    "exports": [
+      "export default ErrorBoundary;"
+    ]
+  },
+  "frontend/src/components/shared/SuccessModal.jsx": {
+    "size": 2352,
+    "lines": 94,
+    "functions": [
+      "SuccessModal"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function SuccessModal({ title, message, onClose, actionText = 'Continue' }) {"
+    ]
+  },
+  "frontend/src/components/shared/Toast.jsx": {
+    "size": 3183,
+    "lines": 152,
+    "functions": [
+      "Toast",
+      "handleClose",
+      "ToastContainer"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function Toast({ message, type = 'info', duration = 5000, onClose }) {",
+      "export function ToastContainer({ toasts, removeToast }) {",
+      "export default Toast;"
+    ]
+  },
+  "frontend/src/components/Sidebar.jsx": {
+    "size": 10359,
+    "lines": 305,
+    "functions": [
+      "Sidebar",
+      "getStyles"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default function Sidebar({ children, footerContent, iconBarContent, onToggle, isOpen = true }) {"
+    ]
+  },
+  "frontend/src/config/index.js": {
+    "size": 2167,
+    "lines": 73,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default config;"
+    ]
+  },
+  "frontend/src/contexts/AuthContext.jsx": {
+    "size": 3092,
+    "lines": 111,
+    "functions": [
+      "useAuth",
+      "AuthProvider",
+      "verifyToken",
+      "login",
+      "register",
+      "logout",
+      "refreshAuth"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const useAuth = () => {",
+      "export const AuthProvider = ({ children }) => {"
+    ]
+  },
+  "frontend/src/contexts/ThemeContext.jsx": {
+    "size": 2577,
+    "lines": 100,
+    "functions": [
+      "ThemeProvider",
+      "toggleTheme",
+      "useTheme"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const themes = {",
+      "export function ThemeProvider({ children }) {",
+      "export function useTheme() {"
+    ]
+  },
+  "frontend/src/contexts/ToastContext.jsx": {
+    "size": 3974,
+    "lines": 172,
+    "functions": [
+      "ToastProvider",
+      "useToast",
+      "ToastContainer",
+      "ToastItem",
+      "handleClose"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function ToastProvider({ children }) {",
+      "export function useToast() {"
+    ]
+  },
+  "frontend/src/hooks/useToast.js": {
+    "size": 1218,
+    "lines": 56,
+    "functions": [
+      "useToast"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function useToast() {"
+    ]
+  },
+  "frontend/src/main.jsx": {
+    "size": 239,
+    "lines": 11,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "frontend/src/services/api.js": {
+    "size": 4376,
+    "lines": 199,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class APIService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default apiService;"
+    ]
+  },
+  "frontend/src/services/projectService.js": {
+    "size": 3062,
+    "lines": 134,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class ProjectService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new ProjectService();"
+    ]
+  },
+  "frontend/src/services/websocket.js": {
+    "size": 6192,
+    "lines": 283,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class WebSocketService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default websocketService;"
+    ]
+  },
+  "frontend/src/styles/theme.js": {
+    "size": 1554,
+    "lines": 59,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const theme = {"
+    ]
+  },
+  "frontend/src/utils/api.js": {
+    "size": 812,
+    "lines": 36,
+    "functions": [
+      "apiRequest",
+      "getApiUrl",
+      "getWsUrl"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const apiRequest = (endpoint, options = {}) => {",
+      "export const getApiUrl = (endpoint) => {",
+      "export const getWsUrl = () => {",
+      "export default apiRequest;"
+    ]
+  },
+  "frontend/src/utils/avatarColors.js": {
+    "size": 1304,
+    "lines": 48,
+    "functions": [
+      "hashString",
+      "getAvatarColor",
+      "getInitials"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function getAvatarColor(username) {",
+      "export function getInitials(username) {"
+    ]
+  },
+  "frontend/src/utils/errorHandler.js": {
+    "size": 3290,
+    "lines": 128,
+    "functions": [
+      "getUserFriendlyMessage",
+      "isRecoverableError",
+      "requiresReauth",
+      "logError",
+      "handleAPIError"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function getUserFriendlyMessage(error) {",
+      "export function isRecoverableError(error) {",
+      "export function requiresReauth(error) {",
+      "export function logError(error, context = {}) {",
+      "export function handleAPIError(error, showToast) {"
+    ]
+  },
+  "frontend/src/utils/router.js": {
+    "size": 569,
+    "lines": 23,
+    "functions": [
+      "getInviteCodeFromUrl",
+      "getDiscussionInviteFromUrl",
+      "clearUrl",
+      "navigateTo"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function getInviteCodeFromUrl() {",
+      "export function getDiscussionInviteFromUrl() {",
+      "export function clearUrl() {",
+      "export function navigateTo(path) {"
+    ]
+  },
+  "backend/src/config/database.js": {
+    "size": 1333,
+    "lines": 46,
+    "functions": [
+      "connectDB"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default connectDB;"
+    ]
+  },
+  "backend/src/config/index.js": {
+    "size": 3732,
+    "lines": 153,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class Config {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new Config();"
+    ]
+  },
+  "backend/src/config/swagger.js": {
+    "size": 637,
+    "lines": 29,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const swaggerSpec = swaggerJsdoc(options)"
+    ]
+  },
+  "backend/src/core/embeddings/EmbeddingService.js": {
+    "size": 4321,
+    "lines": 166,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class EmbeddingService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new EmbeddingService();"
+    ]
+  },
+  "backend/src/core/extraction/StructuredExtractor.js": {
+    "size": 2609,
+    "lines": 111,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class StructuredExtractor {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new StructuredExtractor();"
+    ]
+  },
+  "backend/src/core/intelligence/InsightExtractor.js": {
+    "size": 24978,
+    "lines": 441,
+    "functions": [
+      "meetsMinLength",
+      "notNoise",
+      "appearsInConversation",
+      "looksLikeDecision",
+      "validateExtractedEntities"
+    ],
+    "endpoints": [],
+    "classes": [
+      "class InsightExtractor {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new InsightExtractor();"
+    ]
+  },
+  "backend/src/core/intelligence/KnowledgeAggregator.js": {
+    "size": 43374,
+    "lines": 871,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class KnowledgeAggregator {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new KnowledgeAggregator();"
+    ]
+  },
+  "backend/src/core/intelligence/ProjectInsightsAggregator.js": {
+    "size": 6240,
+    "lines": 217,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class ProjectInsightsAggregator {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new ProjectInsightsAggregator();"
+    ]
+  },
+  "backend/src/core/intelligence/StrategicSignalEngine.js": {
+    "size": 4256,
+    "lines": 115,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class StrategicSignalEngine {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new StrategicSignalEngine();"
+    ]
+  },
+  "backend/src/core/orchestrator/AIOrchestrator.js": {
+    "size": 37966,
+    "lines": 1099,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class AIOrchestrator {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new AIOrchestrator();"
+    ]
+  },
+  "backend/src/core/stability/EncryptionService.js": {
+    "size": 6184,
+    "lines": 194,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class EncryptionService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new EncryptionService();"
+    ]
+  },
+  "backend/src/core/stability/LLMGuardrails.js": {
+    "size": 8309,
+    "lines": 300,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class LLMGuardrails {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new LLMGuardrails();"
+    ]
+  },
+  "backend/src/core/stability/RateLimiter.js": {
+    "size": 5761,
+    "lines": 220,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class RateLimiter {"
+    ],
+    "models": [],
+    "exports": [
+      "export class RateLimitError extends Error {",
+      "export default new RateLimiter();"
+    ]
+  },
+  "backend/src/core/stability/TokenManager.js": {
+    "size": 6168,
+    "lines": 190,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class TokenManager {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new TokenManager();"
+    ]
+  },
+  "backend/src/core/vector/VectorStore.js": {
+    "size": 4117,
+    "lines": 154,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class VectorStore {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new VectorStore();"
+    ]
+  },
+  "backend/src/middleware/auth.js": {
+    "size": 809,
+    "lines": 32,
+    "functions": [
+      "authenticate",
+      "optionalAuth"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const authenticate = async (req, res, next) => {",
+      "export const optionalAuth = async (req, res, next) => {"
+    ]
+  },
+  "backend/src/middleware/errorHandler.js": {
+    "size": 3826,
+    "lines": 145,
+    "functions": [
+      "errorHandler",
+      "asyncHandler",
+      "notFoundHandler"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export class AppError extends Error {",
+      "export class ValidationError extends AppError {",
+      "export class AuthenticationError extends AppError {",
+      "export class AuthorizationError extends AppError {",
+      "export class NotFoundError extends AppError {",
+      "export class ConflictError extends AppError {",
+      "export class RateLimitError extends AppError {",
+      "export class AIServiceError extends AppError {",
+      "export function errorHandler(err, req, res, next) {",
+      "export function asyncHandler(fn) {",
+      "export function notFoundHandler(req, res, next) {"
+    ]
+  },
+  "backend/src/middleware/validation.js": {
+    "size": 5374,
+    "lines": 196,
+    "functions": [
+      "validateField",
+      "validate",
+      "sanitize"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const validators = {",
+      "export const schemas = {",
+      "export function validate(schemaName) {",
+      "export function sanitize(req, res, next) {"
+    ]
+  },
+  "backend/src/models/ActionItem.js": {
+    "size": 1313,
+    "lines": 48,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('ActionItem', actionItemSchema);"
+    ]
+  },
+  "backend/src/models/Blocker.js": {
+    "size": 1391,
+    "lines": 50,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Blocker', blockerSchema);"
+    ]
+  },
+  "backend/src/models/Decision.js": {
+    "size": 1736,
+    "lines": 63,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Decision', decisionSchema);"
+    ]
+  },
+  "backend/src/models/Discussion.js": {
+    "size": 1865,
+    "lines": 88,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Discussion', discussionSchema);"
+    ]
+  },
+  "backend/src/models/Document.js": {
+    "size": 860,
+    "lines": 44,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Document', documentSchema);"
+    ]
+  },
+  "backend/src/models/DocumentChunk.js": {
+    "size": 1142,
+    "lines": 50,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('DocumentChunk', documentChunkSchema);"
+    ]
+  },
+  "backend/src/models/Message.js": {
+    "size": 1239,
+    "lines": 52,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Message', messageSchema);"
+    ]
+  },
+  "backend/src/models/Project.js": {
+    "size": 1418,
+    "lines": 67,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Project', projectSchema);"
+    ]
+  },
+  "backend/src/models/ProjectInsights.js": {
+    "size": 1891,
+    "lines": 94,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('ProjectInsights', projectInsightsSchema);"
+    ]
+  },
+  "backend/src/models/ProjectState.js": {
+    "size": 1213,
+    "lines": 37,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('ProjectState', projectStateSchema);"
+    ]
+  },
+  "backend/src/models/Room.js": {
+    "size": 595,
+    "lines": 33,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Room', roomSchema);"
+    ]
+  },
+  "backend/src/models/Summary.js": {
+    "size": 1117,
+    "lines": 49,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Summary', summarySchema);"
+    ]
+  },
+  "backend/src/models/Topic.js": {
+    "size": 1171,
+    "lines": 38,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('Topic', topicSchema);"
+    ]
+  },
+  "backend/src/models/User.js": {
+    "size": 1480,
+    "lines": 73,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": [
+      "export default mongoose.model('User', userSchema);"
+    ]
+  },
+  "backend/src/routes/auth.js": {
+    "size": 4972,
+    "lines": 152,
+    "functions": [],
+    "endpoints": [
+      "router.post('/register',",
+      "router.post('/login',",
+      "router.get('/google', (req, res) => {",
+      "router.get('/google/callback', asyncHandler(async (req, res) => {",
+      "router.post('/google', asyncHandler(async (req, res) => {",
+      "router.get('/verify', asyncHandler(async (req, res) => {"
+    ],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default router;"
+    ]
+  },
+  "backend/src/routes/projects.js": {
+    "size": 34309,
+    "lines": 956,
+    "functions": [
+      "buildDashboardResponse",
+      "buildEntityDashboard",
+      "buildLegacyDashboard",
+      "filterGarbage",
+      "buildLLMDashboard",
+      "filterGarbage"
+    ],
+    "endpoints": [
+      "router.post('/', async (req, res) => {",
+      "router.get('/', async (req, res) => {",
+      "router.get('/:projectId', async (req, res) => {",
+      "router.post('/join', async (req, res) => {",
+      "router.post('/invite-preview', async (req, res) => {",
+      "router.post('/:projectId/invite-email', async (req, res) => {",
+      "router.patch('/:projectId/stage', async (req, res) => {",
+      "router.patch('/:projectId', async (req, res) => {",
+      "router.put('/:projectId/llm', async (req, res) => {",
+      "router.post('/:projectId/api-key', async (req, res) => {",
+      "router.get('/:projectId/discussions', async (req, res) => {",
+      "router.post('/:projectId/discussions', async (req, res) => {",
+      "router.post('/:projectId/discussions/:discussionId/invite', async (req, res) => {",
+      "router.post('/:projectId/discussions/:discussionId/invite-email', async (req, res) => {",
+      "router.get('/:projectId/documents', async (req, res) => {",
+      "router.get('/:projectId/documents/:documentId/chunks', async (req, res) => {",
+      "router.post('/:projectId/documents', async (req, res) => {",
+      "router.get('/:projectId/summaries', async (req, res) => {",
+      "router.post('/:projectId/discussions/:discussionId/summarize', async (req, res) => {",
+      "router.put('/:projectId/discussions/:discussionId/summaries/:summaryId', async (req, res) => {",
+      "router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', async (req, res) => {",
+      "router.post('/:projectId/dashboard/refresh', async (req, res) => {",
+      "router.get('/:projectId/dashboard', async (req, res) => {"
+    ],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default router;"
+    ]
+  },
+  "backend/src/routes/user.js": {
+    "size": 4072,
+    "lines": 141,
+    "functions": [],
+    "endpoints": [
+      "router.get('/profile', async (req, res) => {",
+      "router.put('/profile', async (req, res) => {",
+      "router.put('/password', async (req, res) => {",
+      "router.get('/stats', async (req, res) => {"
+    ],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export default router;"
+    ]
+  },
+  "backend/src/scripts/backfill-topic-embeddings.js": {
+    "size": 1114,
+    "lines": 33,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/check-projects.js": {
+    "size": 793,
+    "lines": 21,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/clean-cross-project-artifacts.js": {
+    "size": 3910,
+    "lines": 103,
+    "functions": [
+      "keywordsOf",
+      "appearsInCorpus",
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/clean-noisy-entities.js": {
+    "size": 2787,
+    "lines": 87,
+    "functions": [
+      "isNoise"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/clean-placeholder-blockers.js": {
+    "size": 952,
+    "lines": 29,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/fix-indexes.js": {
+    "size": 1866,
+    "lines": 61,
+    "functions": [
+      "fixIndexes"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/fix-supersessions.js": {
+    "size": 3760,
+    "lines": 105,
+    "functions": [
+      "main",
+      "cosineSimilarity"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [
+      "Schema definition",
+      "Schema definition",
+      "Schema definition"
+    ],
+    "exports": []
+  },
+  "backend/src/scripts/migrate-knowledge-model.js": {
+    "size": 6406,
+    "lines": 203,
+    "functions": [
+      "migrateTopics",
+      "migrateDecisions",
+      "migrateBlockers",
+      "migrateActionItems",
+      "migrateProjectState",
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/migrate-to-groq.js": {
+    "size": 952,
+    "lines": 37,
+    "functions": [
+      "migrateToGroq"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/rebuild-pinned-context.js": {
+    "size": 1300,
+    "lines": 39,
+    "functions": [
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/reset-and-reextract.js": {
+    "size": 5010,
+    "lines": 126,
+    "functions": [
+      "mapLLMConfig",
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/setup.js": {
+    "size": 1129,
+    "lines": 38,
+    "functions": [
+      "setupDatabase"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulate-conversation.js": {
+    "size": 13256,
+    "lines": 240,
+    "functions": [
+      "to",
+      "to",
+      "sleep",
+      "log",
+      "getOrCreateUser",
+      "main"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulate-hirehub.js": {
+    "size": 13581,
+    "lines": 215,
+    "functions": [
+      "sleep",
+      "write",
+      "log",
+      "getOrCreateUser",
+      "main"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/1-healthsync-ideation.js": {
+    "size": 382,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/2-healthsync-planning.js": {
+    "size": 428,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/3-healthsync-development.js": {
+    "size": 471,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/4-healthsync-testing.js": {
+    "size": 501,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/5-buildboard-full.js": {
+    "size": 598,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/5-healthsync-full.js": {
+    "size": 552,
+    "lines": 10,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/simulations/buildboard-base.js": {
+    "size": 9497,
+    "lines": 228,
+    "functions": [
+      "runSimulation",
+      "write",
+      "log",
+      "getOrCreateUser",
+      "sleep"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export async function runSimulation({ projectTitle, projectDesc, usersToCreate, conversations }) {"
+    ]
+  },
+  "backend/src/scripts/simulations/buildboard-data.js": {
+    "size": 28591,
+    "lines": 210,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const usersToCreate = ['Nikunj', 'Digambar', 'Aarya', 'Prathamesh', 'Adarsh'];",
+      "export const threadSummaries = {",
+      "export const stage1_ideation = [",
+      "export const stage2_planning = [",
+      "export const stage3_development = [",
+      "export const stage4_testing = [",
+      "export const stage5_deployment = [",
+      "export const allConversations = ["
+    ]
+  },
+  "backend/src/scripts/simulations/healthsync-base.js": {
+    "size": 9494,
+    "lines": 228,
+    "functions": [
+      "runSimulation",
+      "write",
+      "log",
+      "getOrCreateUser",
+      "sleep"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export async function runSimulation({ projectTitle, projectDesc, usersToCreate, conversations }) {"
+    ]
+  },
+  "backend/src/scripts/simulations/healthsync-data.js": {
+    "size": 16605,
+    "lines": 133,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export const usersToCreate = ['dr_smith', 'alice', 'bob', 'charlie'];",
+      "export const threadSummaries = {",
+      "export const stage1_ideation = [",
+      "export const stage2_planning = [",
+      "export const stage3_development = [",
+      "export const stage4_testing = [",
+      "export const stage5_deployment = [",
+      "export const allConversations = ["
+    ]
+  },
+  "backend/src/scripts/test-idempotency.js": {
+    "size": 3508,
+    "lines": 108,
+    "functions": [
+      "countEntities",
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/scripts/verify-knowledge-model.js": {
+    "size": 3629,
+    "lines": 97,
+    "functions": [
+      "verifyProject",
+      "run"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/server.js": {
+    "size": 3984,
+    "lines": 147,
+    "functions": [],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": []
+  },
+  "backend/src/services/aiService.js": {
+    "size": 1930,
+    "lines": 69,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class AIService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new AIService();"
+    ]
+  },
+  "backend/src/services/authService.js": {
+    "size": 3684,
+    "lines": 155,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class AuthService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new AuthService();"
+    ]
+  },
+  "backend/src/services/connectionManager.js": {
+    "size": 15691,
+    "lines": 585,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class ConnectionManager {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new ConnectionManager();"
+    ]
+  },
+  "backend/src/services/discussionService.js": {
+    "size": 4159,
+    "lines": 153,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class DiscussionService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new DiscussionService();"
+    ]
+  },
+  "backend/src/services/documentService.js": {
+    "size": 6622,
+    "lines": 230,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class DocumentService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new DocumentService();"
+    ]
+  },
+  "backend/src/services/emailService.js": {
+    "size": 11274,
+    "lines": 310,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class EmailService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new EmailService();"
+    ]
+  },
+  "backend/src/services/messageService.js": {
+    "size": 3091,
+    "lines": 112,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class MessageService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new MessageService();"
+    ]
+  },
+  "backend/src/services/projectService.js": {
+    "size": 6566,
+    "lines": 251,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class ProjectService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new ProjectService();"
+    ]
+  },
+  "backend/src/services/roomService.js": {
+    "size": 2673,
+    "lines": 100,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class RoomService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new RoomService();"
+    ]
+  },
+  "backend/src/services/summaryService.js": {
+    "size": 2783,
+    "lines": 114,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class SummaryService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new SummaryService();"
+    ]
+  },
+  "backend/src/services/userService.js": {
+    "size": 3235,
+    "lines": 129,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class UserService {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new UserService();"
+    ]
+  },
+  "backend/src/utils/chunking.js": {
+    "size": 2801,
+    "lines": 104,
+    "functions": [
+      "chunkText",
+      "validateChunk"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function chunkText(text, targetSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {",
+      "export function validateChunk(chunk, minSize = 50, maxSize = 2000) {"
+    ]
+  },
+  "backend/src/utils/logger.js": {
+    "size": 2109,
+    "lines": 94,
+    "functions": [],
+    "endpoints": [],
+    "classes": [
+      "class Logger {"
+    ],
+    "models": [],
+    "exports": [
+      "export default new Logger();"
+    ]
+  },
+  "backend/src/utils/normalizeText.js": {
+    "size": 3079,
+    "lines": 73,
+    "functions": [
+      "singularize",
+      "normalizeText",
+      "normalizeTopicName",
+      "normalizeDecisionText",
+      "normalizeActionVerb"
+    ],
+    "endpoints": [],
+    "classes": [],
+    "models": [],
+    "exports": [
+      "export function normalizeText(text) {",
+      "export function normalizeTopicName(name) {",
+      "export function normalizeDecisionText(text) {",
+      "export function normalizeActionVerb(text) {"
+    ]
+  }
+}
