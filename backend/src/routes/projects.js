@@ -655,59 +655,6 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
-// --- Signal review routes ---
-router.get('/:projectId/signals/pending', async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
-    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
-
-    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
-    const signals = await SignalBuffer.getPendingSignals(projectId);
-    res.json({ success: true, signals });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/:projectId/signals/:signalId/confirm', async (req, res) => {
-  try {
-    const { projectId, signalId } = req.params;
-    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
-    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
-
-    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
-    const SignalNormalizer = (await import('../core/extraction/SignalNormalizer.js')).default;
-    const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
-
-    const confirmed = await SignalBuffer.confirmSignal(signalId);
-    if (!confirmed) return res.status(404).json({ success: false, error: 'Signal not found' });
-
-    const normalized = await SignalNormalizer.normalize(confirmed);
-    await KnowledgeAggregator.mergeInsights({ projectId, discussionId: confirmed.discussionId, extracted: normalized });
-
-    res.json({ success: true, signal: confirmed, entity: normalized });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/:projectId/signals/:signalId/dismiss', async (req, res) => {
-  try {
-    const { projectId, signalId } = req.params;
-    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
-    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
-
-    const SignalBuffer = (await import('../core/extraction/SignalBuffer.js')).default;
-    await SignalBuffer.dismissSignal(signalId);
-    
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Force-refresh dashboard: re-runs extraction on main thread, then returns fresh dashboard
 router.post('/:projectId/dashboard/refresh', async (req, res) => {
   try {

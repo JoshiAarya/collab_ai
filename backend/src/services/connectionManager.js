@@ -12,9 +12,6 @@ import discussionService from './discussionService.js';
 import aiService from './aiService.js';
 import InsightExtractor from '../core/intelligence/InsightExtractor.js';
 import KnowledgeAggregator from '../core/intelligence/KnowledgeAggregator.js';
-import SignalClassifier from '../core/extraction/SignalClassifier.js';
-import SignalBuffer from '../core/extraction/SignalBuffer.js';
-import SignalNormalizer from '../core/extraction/SignalNormalizer.js';
 
 class ConnectionManager {
   constructor() {
@@ -258,7 +255,7 @@ class ConnectionManager {
       });
 
       // Async extraction from user message — non-blocking, fail-safe
-      this._processMessageForSignals(message, projectId, discussionId).catch(() => {});
+      this._triggerExtractionForMessage(message, projectId, discussionId).catch(() => {});
 
       // Check for AI invocation
       if (text.startsWith('@CollabAI')) {
@@ -460,32 +457,6 @@ class ConnectionManager {
 
     limit.count++;
     return true;
-  }
-
-  async _processMessageForSignals(message, projectId, discussionId) {
-    // Skip AI messages
-    if (message.isAI) return;
-    // Skip @CollabAI queries
-    if (message.text && message.text.startsWith('@CollabAI')) return;
-    
-    const signal = SignalClassifier.classify(message);
-    if (!signal) return; // Tier 3, discard
-    
-    const pending = await SignalBuffer.addSignal(projectId, discussionId, signal);
-    
-    if (signal.tier === 1) {
-      // Auto-capture immediately, no user action needed
-      const normalized = await SignalNormalizer.normalize(signal);
-      await KnowledgeAggregator.mergeInsights({ projectId, discussionId, extracted: normalized });
-      await SignalBuffer.autoCapture(pending._id);
-      
-      // Emit to dashboard WebSocket: subtle "auto-captured" indicator
-      this.broadcastToDiscussion(discussionId, { type: 'signal_auto_captured', signal: normalized });
-    } else {
-      // Tier 2: wait for review
-      const count = await SignalBuffer.getPendingCount(projectId);
-      this.broadcastToDiscussion(discussionId, { type: 'signal_pending', count });
-    }
   }
 
   /**

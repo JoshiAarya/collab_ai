@@ -123,25 +123,10 @@ class ProjectService {
   }
 
   /**
-   * Get pending signals
+   * Get dashboard insights
    */
-  async getPendingSignals(projectId) {
-    const res = await apiService.get(`/api/projects/${projectId}/signals/pending`);
-    return res.signals;
-  }
-
-  /**
-   * Confirm pending signal
-   */
-  async confirmSignal(projectId, signalId) {
-    return await apiService.post(`/api/projects/${projectId}/signals/${signalId}/confirm`);
-  }
-
-  /**
-   * Dismiss pending signal
-   */
-  async dismissSignal(projectId, signalId) {
-    return await apiService.post(`/api/projects/${projectId}/signals/${signalId}/dismiss`);
+  async getDashboardInsights(projectId) {
+    return await apiService.get(config.api.projects.insights(projectId));
   }
 }
 

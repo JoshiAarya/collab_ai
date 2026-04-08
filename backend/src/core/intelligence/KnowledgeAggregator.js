@@ -655,7 +655,7 @@ class KnowledgeAggregator {
   // Maximum similarity — above this, old and new are the same decision rephrased, not a real pivot.
   static SUPERSESSION_SEMANTIC_MAX = 0.85;
   // Word overlap threshold for matching LLM-reported old decision to DB records.
-  static SUPERSESSION_WORD_OVERLAP_MIN = 0.30;
+  static SUPERSESSION_WORD_OVERLAP_MIN = 0.85;
 
   async _applySupersessions(projectId, supersessions) {
     if (!supersessions?.length) return;

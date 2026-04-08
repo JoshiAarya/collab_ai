@@ -22,9 +22,6 @@ import discussionService from '../services/discussionService.js';
 import InsightExtractor from '../core/intelligence/InsightExtractor.js';
 import KnowledgeAggregator from '../core/intelligence/KnowledgeAggregator.js';
 import AIOrchestrator from '../core/orchestrator/AIOrchestrator.js';
-import SignalClassifier from '../core/extraction/SignalClassifier.js';
-import SignalBuffer from '../core/extraction/SignalBuffer.js';
-import SignalNormalizer from '../core/extraction/SignalNormalizer.js';
 import Project from '../models/Project.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -32,7 +29,6 @@ import Project from '../models/Project.js';
 const args     = process.argv.slice(2);
 const DELAY_MS = parseInt(process.env.DELAY_MS ?? args.find(a => a.startsWith('--delay='))?.split('=')[1] ?? '800', 10);
 const RESET    = process.env.RESET === 'true' || args.includes('--reset');
-const AUTO_CONFIRM = args.includes('--auto-confirm-tier2');
 
 // ─── Project definition ───────────────────────────────────────────────────────
 
@@ -194,41 +190,38 @@ async function main() {
     // Trigger extraction pipeline — same as connectionManager._triggerExtractionForMessage
     // extractFromMessage handles the rate gate internally (fires every 5th message)
     if (text.length >= 30) {
-      let nextContext = '';
-      for (let j = i + 1; j < Math.min(i + 3, CONVERSATION.length); j++) {
-        nextContext += ' ' + CONVERSATION[j].text;
-      }
-
       try {
-        const signal = SignalClassifier.classify(message, nextContext);
-        if (signal) {
-          const pending = await SignalBuffer.addSignal(project._id, discussion._id, signal);
-          let processSignal = false;
+        const extracted = await InsightExtractor.extractFromMessage({
+          projectId:    project._id,
+          discussionId: discussion._id,
+          messageId:    message._id,
+          text,
+          isAI:         false,
+          llmConfig,
+          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+        });
 
-          if (signal.tier === 1) {
-            processSignal = true;
-          } else if (AUTO_CONFIRM) {
-            processSignal = true;
-            await SignalBuffer.confirmSignal(pending._id);
-          }
+        const hasArtifacts =
+          extracted.topics.length + extracted.decisions.length +
+          extracted.blockers.length + extracted.actionItems.length > 0;
 
-          if (processSignal) {
-            const normalized = await SignalNormalizer.normalize(signal);
-            await KnowledgeAggregator.mergeInsights({
-              projectId: project._id,
-              discussionId: discussion._id,
-              extracted: normalized
-            });
-            if (signal.tier === 1) await SignalBuffer.autoCapture(pending._id);
-            process.stdout.write(`         ↳ Signal classified [Tier ${signal.tier} ${signal.type}]: ${normalized.decisions[0]?.text || normalized.blockers[0]?.text || normalized.actionItems[0]?.text || ''}\n`);
-          } else {
-            process.stdout.write(`         ↳ Signal classified [Tier ${signal.tier} ${signal.type}] - waiting for review\n`);
-          }
-        } else {
-          process.stdout.write(`         ↳ skipped (no signal)\n`);
+        // Always merge (even empty) so _recomputeProjectState runs after each window
+        await KnowledgeAggregator.mergeInsights({
+          projectId:    project._id,
+          discussionId: discussion._id,
+          extracted:    { ...extracted, messageId: message._id }
+        });
+
+        if (hasArtifacts) {
+          process.stdout.write(
+            `         ↳ extracted: ${extracted.decisions.length}d ${extracted.blockers.length}b ` +
+            `${extracted.actionItems.length}a ${extracted.topics.length}t\n`
+          );
+        } else if (extracted.windowMessageIds?.length) {
+          process.stdout.write(`         ↳ window processed, no new artifacts\n`);
         }
       } catch (err) {
-        process.stdout.write(`         ↳ skipped (${err.message})\n`);
+        process.stdout.write(`         ↳ extraction skipped (${err.message})\n`);
       }
     }
 

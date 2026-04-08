@@ -6,9 +6,6 @@ import discussionService from '../../services/discussionService.js';
 import InsightExtractor from '../../core/intelligence/InsightExtractor.js';
 import KnowledgeAggregator from '../../core/intelligence/KnowledgeAggregator.js';
 import AIOrchestrator from '../../core/orchestrator/AIOrchestrator.js';
-import SignalClassifier from '../../core/extraction/SignalClassifier.js';
-import SignalBuffer from '../../core/extraction/SignalBuffer.js';
-import SignalNormalizer from '../../core/extraction/SignalNormalizer.js';
 import Project from '../../models/Project.js';
 
 import fs from 'fs';
@@ -20,7 +17,6 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
   const args = process.argv.slice(2);
   const DELAY_MS = parseInt(process.env.DELAY_MS ?? args.find(a => a.startsWith('--delay='))?.split('=')[1] ?? '800', 10);
   const RESET = process.env.RESET === 'true' || args.includes('--reset');
-  const AUTO_CONFIRM = args.includes('--auto-confirm-tier2');
 
   const normalizedTitle = projectTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   const LOG_FILE = path.join(__dirname, `../../../simulate-${normalizedTitle}.log`);
@@ -130,41 +126,45 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
     write(`  [${String(i + 1).padStart(2, '0')}/${conversations.length}] [${thread}] ${username}: ${text.substring(0, 72)}...\n`);
 
     if (text.length >= 30) {
-      let nextContext = '';
-      for (let j = i + 1; j < Math.min(i + 3, conversations.length); j++) {
-        nextContext += ' ' + conversations[j].text;
-      }
+      if (discussion.isMain) {
+        try {
+          const extracted = await InsightExtractor.extractFromMessage({
+            projectId: project._id,
+            discussionId: discussion._id,
+            messageId: message._id,
+            text,
+            username,
+            isAI: false,
+            llmConfig,
+            callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+          });
 
-      try {
-        const signal = SignalClassifier.classify(message, nextContext);
-        if (signal) {
-          const pending = await SignalBuffer.addSignal(project._id, discussion._id, signal);
-          let processSignal = false;
+          await KnowledgeAggregator.mergeInsights({
+            projectId: project._id,
+            discussionId: discussion._id,
+            extracted: { ...extracted, messageId: message._id }
+          });
 
-          if (signal.tier === 1) {
-            processSignal = true;
-          } else if (AUTO_CONFIRM) {
-            processSignal = true;
-            await SignalBuffer.confirmSignal(pending._id);
-          }
-
-          if (processSignal) {
-            const normalized = await SignalNormalizer.normalize(signal);
-            await KnowledgeAggregator.mergeInsights({
-              projectId: project._id,
-              discussionId: discussion._id,
-              extracted: normalized
-            });
-            if (signal.tier === 1) await SignalBuffer.autoCapture(pending._id);
-            write(`         ↳ Signal classified [Tier ${signal.tier} ${signal.type}]: ${normalized.decisions[0]?.text || normalized.blockers[0]?.text || normalized.actionItems[0]?.text || ''}\n`);
+          const total = extracted.topics.length + extracted.decisions.length +
+            extracted.blockers.length + extracted.actionItems.length;
+          if (total > 0) {
+            write(`         ↳ ${extracted.decisions.length}d ${extracted.blockers.length}b ${extracted.actionItems.length}a ${extracted.topics.length}t\n`);
+            if (extracted.topics.length)
+              write(`            topics:    ${extracted.topics.map(t => t.name).join(' | ')}\n`);
+            if (extracted.decisions.length)
+              write(`            decisions: ${extracted.decisions.map(d => d.text.substring(0, 60)).join(' | ')}\n`);
+            if (extracted.blockers.length)
+              write(`            blockers:  ${extracted.blockers.map(b => b.text.substring(0, 60)).join(' | ')}\n`);
+            if (extracted.actionItems.length)
+              write(`            actions:   ${extracted.actionItems.map(a => a.text.substring(0, 60)).join(' | ')}\n`);
           } else {
-            write(`         ↳ Signal classified [Tier ${signal.tier} ${signal.type}] - waiting for review\n`);
+            write(`         ↳ skipped (rate gate or overlap guard)\n`);
           }
-        } else {
-          write(`         ↳ skipped (no signal)\n`);
+        } catch (err) {
+          write(`         ↳ skipped (${err.message})\n`);
         }
-      } catch (err) {
-        write(`         ↳ skipped (${err.message})\n`);
+      } else {
+        write(`         ↳ skipped (not main thread — waits for summary)\n`);
       }
     }
 
@@ -196,6 +196,23 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
           llmConfig.provider,
           await Message.countDocuments({ discussionId: disc._id })
         );
+
+        const extracted = await InsightExtractor.extractFromMessage({
+          projectId: project._id,
+          discussionId: disc._id,
+          messageId: savedSummary._id,
+          text: summaryContent,
+          username: 'Thread Summary',
+          isAI: false,
+          llmConfig,
+          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator),
+          bypassRateLimit: true
+        });
+        await KnowledgeAggregator.mergeInsights({
+          projectId: project._id,
+          discussionId: disc._id,
+          extracted: { ...extracted, messageId: savedSummary._id }
+        });
       } catch (err) {
         log(`Failed to summarize ${threadName}: ${err.message}`);
       }

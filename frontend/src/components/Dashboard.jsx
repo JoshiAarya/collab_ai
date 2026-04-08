@@ -4,7 +4,6 @@ import { getAvatarColor, getInitials } from '../utils/avatarColors';
 import ProjectIntelligenceCard from './ProjectIntelligenceCard';
 import DecisionTimeline from './DecisionTimeline';
 import BlockerTracker from './BlockerTracker';
-import PendingSignals from './PendingSignals';
 
 // ─── Color Helpers ────────────────────────────────────────────────────────────
 
@@ -123,8 +122,6 @@ export default function Dashboard({ project, onClose, token, colors }) {
       ) : dashboard ? (
         <div style={S.content}>
 
-          <PendingSignals projectId={project._id} onRefreshDashboard={refreshDashboard} />
-
           {/* ── Metric Cards ── */}
           <div style={S.metricsRow}>
             <MetricCard
@@ -176,15 +173,6 @@ export default function Dashboard({ project, onClose, token, colors }) {
 
           {/* ── Main Grid ── */}
           <div style={S.grid}>
-
-            {/* Current Project Summary (Derived Understanding Layer) */}
-            {ps?.pinnedContext && (
-              <Card title="Current Project Summary" icon="💡" colors={colors} style={{ gridColumn: '1 / -1' }}>
-                <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', color: colors.text, fontFamily: 'inherit', margin: 0, lineHeight: 1.5 }}>
-                  {ps.pinnedContext}
-                </pre>
-              </Card>
-            )}
 
             {/* Left Column */}
             <div style={S.leftCol}>
@@ -442,7 +430,7 @@ export default function Dashboard({ project, onClose, token, colors }) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Card({ title, icon, children, colors, action, accent, subtle, style }) {
+function Card({ title, icon, children, colors, action, accent, subtle }) {
   return (
     <div style={{
       background: colors.surface,
@@ -452,8 +440,7 @@ function Card({ title, icon, children, colors, action, accent, subtle, style }) 
       marginBottom: '16px',
       borderLeft: accent ? `3px solid ${accent}` : undefined,
       opacity: subtle ? 0.85 : 1,
-      animation: 'fadeIn 0.3s ease',
-      ...(style || {})
+      animation: 'fadeIn 0.3s ease'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: '600', color: colors.text, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
