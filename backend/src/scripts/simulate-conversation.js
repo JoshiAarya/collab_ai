@@ -1,33 +1,14 @@
-/**
- * simulate-conversation.js
- *
- * Creates a project + discussion and replays a hardcoded conversation,
- * triggering the full extraction pipeline on each message.
- *
- * Usage:
- *   node --experimental-vm-modules src/scripts/simulate-conversation.js
- *   # or if package.json has "type":"module":
- *   node src/scripts/simulate-conversation.js
- *
- * Options (env vars):
- *   DELAY_MS=800   — ms between messages (default 800, set 0 for instant)
- *   RESET=true     — delete existing project with same title before creating
- */
-
 import 'dotenv/config';
 import connectDB from '../config/database.js';
 import authService from '../services/authService.js';
 import projectService from '../services/projectService.js';
 import discussionService from '../services/discussionService.js';
-import InsightExtractor from '../core/intelligence/InsightExtractor.js';
-import KnowledgeAggregator from '../core/intelligence/KnowledgeAggregator.js';
-import AIOrchestrator from '../core/orchestrator/AIOrchestrator.js';
 import Project from '../models/Project.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const args     = process.argv.slice(2);
-const DELAY_MS = parseInt(process.env.DELAY_MS ?? args.find(a => a.startsWith('--delay='))?.split('=')[1] ?? '800', 10);
+const DELAY_MS = parseInt(process.env.DELAY_MS || args.find(a => a.startsWith('--delay='))?.split('=')[1] || '800', 10);
 const RESET    = process.env.RESET === 'true' || args.includes('--reset');
 
 // ─── Project definition ───────────────────────────────────────────────────────
@@ -88,21 +69,17 @@ const CONVERSATION = [
   { user: 'nk', text: "Sounds like a plan. Let's sync again tomorrow once the first 100 tenders are successfully ingested." },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function log(msg) { console.log(`[simulate] ${msg}`); }
 
 async function getOrCreateUser(username) {
-  // Look up by username directly — avoids password issues with existing accounts
   const User = (await import('../models/User.js')).default;
   const existing = await User.findOne({ username }).lean();
   if (existing) {
     log(`Found existing user: ${username} (${existing._id})`);
     return existing;
   }
-  // Create fresh test user
   const email    = `${username}@bidpulse.test`;
   const password = 'Test1234!';
   const result = await authService.register(username, email, password);
@@ -110,24 +87,49 @@ async function getOrCreateUser(username) {
   return result.user;
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// Minimal manual fetch for NodeJS 18+ (which we assume is used, or polyfill needed)
+async function triggerDecisionAPI(projectId, messageId, text, token) {
+  const port = process.env.PORT || 8080;
+  const isDecision = /let's use|we will|we should|i'll write|in postgres|we need|we keep 5/i.test(text);
+  
+  if (isDecision) {
+    try {
+      const res = await fetch(`http://localhost:${port}/api/projects/${projectId}/decisions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          messageId: messageId,
+          sourceMessageText: text
+        })
+      });
+
+      if (res.ok) {
+        process.stdout.write(`         ↳ decision saved manually via API\n`);
+      } else {
+        process.stdout.write(`         ↳ API returned ${res.status}\n`);
+      }
+    } catch (err) {
+      process.stdout.write(`         ↳ API call failed (${err.message}). Is the server running?\n`);
+    }
+  }
+}
 
 async function main() {
   await connectDB();
   log('DB connected');
 
-  // Optionally wipe existing project
   if (RESET) {
     const deleted = await Project.deleteOne({ title: PROJECT_TITLE });
     if (deleted.deletedCount) log(`Deleted existing project "${PROJECT_TITLE}"`);
   }
 
-  // 1. Get/create users
   const nk = await getOrCreateUser('nk');
   const pk = await getOrCreateUser('pk');
   const userMap = { nk, pk };
 
-  // 2. Create project (owned by nk)
   let project;
   const existing = await Project.findOne({ title: PROJECT_TITLE }).lean();
   if (existing) {
@@ -138,7 +140,6 @@ async function main() {
     log(`Created project: ${project._id}`);
   }
 
-  // 3. Add pk as member
   try {
     await projectService.joinProject(project.inviteCode, pk._id);
     log('pk joined project');
@@ -146,7 +147,6 @@ async function main() {
     log('pk already a member');
   }
 
-  // 4. Get or create main discussion
   const discussions = await discussionService.getProjectDiscussions(project._id);
   let discussion = discussions.find(d => d.isMain) || discussions[0];
   if (!discussion) {
@@ -154,76 +154,34 @@ async function main() {
       project._id, 'Main', '', nk._id, nk._id
     );
     log(`Created discussion: ${discussion._id}`);
-  } else {
-    log(`Using discussion: ${discussion._id}`);
   }
 
-  // 5. Add pk to discussion
   try {
     await discussionService.joinDiscussion(discussion._id, pk._id);
   } catch { /* already in */ }
 
-  // 6. Get LLM config
-  const fullProject = await projectService.getProjectById(project._id);
-  const llmConfig = fullProject.activeLLM || { provider: 'groq', model: 'llama-3.1-8b-instant' };
-  log(`LLM: ${llmConfig.provider}/${llmConfig.model}`);
-
-  // 7. Replay conversation
   log(`\nReplaying ${CONVERSATION.length} messages (delay: ${DELAY_MS}ms)...\n`);
 
   for (let i = 0; i < CONVERSATION.length; i++) {
     const { user: username, text } = CONVERSATION[i];
     const user = userMap[username];
 
-    // Save message
     const message = await discussionService.addMessage(
       discussion._id,
       project._id,
       user._id,
       username,
       text,
-      false  // not AI
+      false
     );
 
     process.stdout.write(`  [${String(i + 1).padStart(2, '0')}/${CONVERSATION.length}] ${username}: ${text.substring(0, 60)}...\n`);
 
-    // Trigger extraction pipeline — same as connectionManager._triggerExtractionForMessage
-    // extractFromMessage handles the rate gate internally (fires every 5th message)
-    if (text.length >= 30) {
-      try {
-        const extracted = await InsightExtractor.extractFromMessage({
-          projectId:    project._id,
-          discussionId: discussion._id,
-          messageId:    message._id,
-          text,
-          isAI:         false,
-          llmConfig,
-          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
-        });
-
-        const hasArtifacts =
-          extracted.topics.length + extracted.decisions.length +
-          extracted.blockers.length + extracted.actionItems.length > 0;
-
-        // Always merge (even empty) so _recomputeProjectState runs after each window
-        await KnowledgeAggregator.mergeInsights({
-          projectId:    project._id,
-          discussionId: discussion._id,
-          extracted:    { ...extracted, messageId: message._id }
-        });
-
-        if (hasArtifacts) {
-          process.stdout.write(
-            `         ↳ extracted: ${extracted.decisions.length}d ${extracted.blockers.length}b ` +
-            `${extracted.actionItems.length}a ${extracted.topics.length}t\n`
-          );
-        } else if (extracted.windowMessageIds?.length) {
-          process.stdout.write(`         ↳ window processed, no new artifacts\n`);
-        }
-      } catch (err) {
-        process.stdout.write(`         ↳ extraction skipped (${err.message})\n`);
-      }
-    }
+    const tokenUser = await authService.getUserById(user._id);
+    const token = await authService.generateToken(tokenUser);
+    
+    // Simulate user "manually logging" a decision
+    await triggerDecisionAPI(project._id, message._id, text, token);
 
     if (DELAY_MS > 0) await sleep(DELAY_MS);
   }

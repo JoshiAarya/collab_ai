@@ -122,12 +122,6 @@ class ProjectService {
     });
   }
 
-  /**
-   * Get dashboard insights
-   */
-  async getDashboardInsights(projectId) {
-    return await apiService.get(config.api.projects.insights(projectId));
-  }
 }
 
 export default new ProjectService();

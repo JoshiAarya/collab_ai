@@ -4,6 +4,8 @@
  */
 
 import DocumentChunk from '../../models/DocumentChunk.js';
+import MessageEmbedding from '../../models/MessageEmbedding.js';
+import Decision from '../../models/Decision.js';
 import logger from '../../utils/logger.js';
 
 class VectorStore {
@@ -72,6 +74,125 @@ class VectorStore {
         error: error.message
       });
       throw error;
+    }
+  }
+
+  /**
+   * Search for semantically similar messages
+   */
+  async searchMessages(projectId, queryEmbedding, topK = 5) {
+    const startTime = Date.now();
+
+    try {
+      if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== this.dimension) {
+        throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
+      }
+
+      // Fetch all message embeddings for the project
+      const messages = await MessageEmbedding.find({ projectId }).lean();
+
+      if (messages.length === 0) {
+        logger.debug('No message embeddings found for project', { projectId });
+        return [];
+      }
+
+      logger.debug('Computing message similarities', {
+        projectId,
+        messageCount: messages.length,
+        topK
+      });
+
+      const results = messages.map(msg => {
+        const similarity = this.cosineSimilarity(queryEmbedding, msg.embedding);
+        return {
+          id: msg._id,
+          messageId: msg.messageId,
+          discussionId: msg.discussionId,
+          content: msg.content,
+          userId: msg.userId,
+          username: msg.username,
+          timestamp: msg.timestamp,
+          similarity
+        };
+      });
+
+      results.sort((a, b) => b.similarity - a.similarity);
+      const topResults = results.slice(0, topK);
+
+      const duration = Date.now() - startTime;
+
+      logger.ai('Vector message search completed', {
+        projectId,
+        totalMessages: messages.length,
+        topK,
+        resultsFound: topResults.length,
+        topSimilarity: topResults[0]?.similarity.toFixed(4),
+        duration: `${duration}ms`
+      });
+
+      return topResults;
+
+    } catch (error) {
+      logger.error('Vector message search failed', {
+        projectId,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Search for semantically similar decisions
+   */
+  async searchDecisions(projectId, queryEmbedding, topK = 8) {
+    const startTime = Date.now();
+
+    try {
+      if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== this.dimension) {
+        throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
+      }
+
+      // Fetch only decisions that have embeddings
+      const decisions = await Decision.find({
+        projectId,
+        embeddingStatus: 'done',
+        embedding: { $exists: true, $ne: [] }
+      }).lean();
+
+      if (decisions.length === 0) {
+        logger.debug('No embedded decisions found for project', { projectId });
+        return [];
+      }
+
+      const results = decisions.map(dec => {
+        const similarity = this.cosineSimilarity(queryEmbedding, dec.embedding);
+        return {
+          id: dec._id,
+          text: dec.text,
+          rationale: dec.rationale,
+          proposedBy: dec.proposedBy,
+          timestamp: dec.timestamp,
+          similarity
+        };
+      });
+
+      results.sort((a, b) => b.similarity - a.similarity);
+      const topResults = results.slice(0, topK);
+
+      const duration = Date.now() - startTime;
+      logger.ai('Vector decision search completed', {
+        projectId,
+        totalDecisions: decisions.length,
+        topK,
+        resultsFound: topResults.length,
+        topSimilarity: topResults[0]?.similarity.toFixed(4),
+        duration: `${duration}ms`
+      });
+
+      return topResults;
+    } catch (error) {
+      logger.error('Vector decision search failed', { projectId, error: error.message });
+      return []; // fail-safe — fall back to empty
     }
   }
 

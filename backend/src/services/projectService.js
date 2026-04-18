@@ -2,6 +2,7 @@ import Project from '../models/Project.js';
 import Discussion from '../models/Discussion.js';
 import User from '../models/User.js';
 import crypto from 'crypto';
+import encryptionService from '../core/stability/EncryptionService.js';
 
 class ProjectService {
   // Create new project
@@ -212,7 +213,7 @@ class ProjectService {
   // Set API key for provider
   async setProjectApiKey(projectId, provider, apiKey) {
     try {
-      const project = await Project.findById(projectId);
+      const project = await Project.findById(projectId).select('+apiKeys');
       if (!project) {
         throw new Error('Project not found');
       }
@@ -221,7 +222,8 @@ class ProjectService {
         project.apiKeys = new Map();
       }
       
-      project.apiKeys.set(provider, apiKey);
+      const encryptedKey = encryptionService.encryptIfNeeded(apiKey);
+      project.apiKeys.set(provider, encryptedKey);
       await project.save();
       
       return project;
@@ -234,7 +236,7 @@ class ProjectService {
   // Get API key for provider
   async getProjectApiKey(projectId, provider) {
     try {
-      const project = await Project.findById(projectId);
+      const project = await Project.findById(projectId).select('+apiKeys');
       if (!project || !project.apiKeys) {
         return null;
       }

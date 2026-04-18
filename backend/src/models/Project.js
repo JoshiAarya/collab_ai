@@ -40,12 +40,13 @@ const projectSchema = new mongoose.Schema({
       type: String,
       default: 'llama-3.1-8b-instant'
     },
-    apiKey: String // encrypted in production
+    apiKey: { type: String, select: false } // encrypted in production
   },
   apiKeys: {
     type: Map,
     of: String,
-    default: {}
+    default: {},
+    select: false
   },
   stage: {
     type: String,

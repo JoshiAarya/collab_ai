@@ -233,3 +233,103 @@ textarea:focus-visible {
 .fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* Memory button - hidden by default, shown on message row hover */
+.memory-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.msg-bubble-row:hover .memory-btn {
+  opacity: 1;
+}
+
+.memory-btn-visible {
+  opacity: 1;
+}
+
+/* AI message accent styling */
+.ai-message-row {
+  border-left: 3px solid #8b5cf6;
+}
+
+/* Modern input area */
+.chat-input-wrapper {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.08);
+}
+
+/* Send button hover */
+.send-btn {
+  transition: opacity 0.15s ease;
+}
+
+/* Message enter animation */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.msg-bubble-row {
+  animation: messageSlideIn 0.25s ease-out;
+}
+
+/* Sidebar thread item hover */
+.thread-item {
+  transition: all 0.15s ease;
+}
+
+.thread-item:hover {
+  background: rgba(139, 92, 246, 0.08) !important;
+}
+
+/* Scrollbar styling for chat area */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Mobile Responsive Layout */
+@media (max-width: 768px) {
+  .sidebar-container {
+    z-index: 2000 !important;
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5) !important;
+  }
+  .main-workspace {
+    margin-left: 48px !important;
+  }
+  .dashboard-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 16px;
+  }
+  .dashboard-content {
+    padding: 16px !important;
+  }
+  .decision-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .messages-container {
+    padding: 16px !important;
+  }
+}

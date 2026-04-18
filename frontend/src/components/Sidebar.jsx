@@ -16,7 +16,7 @@ export default function Sidebar({ children, footerContent, iconBarContent, onTog
   return (
     <>
       {/* Icon Bar - Always visible */}
-      <div style={styles.iconBar}>
+      <div className="icon-bar-container" style={styles.iconBar}>
         <button 
           onClick={onToggle} 
           style={styles.iconBarBtn}
@@ -43,7 +43,7 @@ export default function Sidebar({ children, footerContent, iconBarContent, onTog
 
       {/* Sidebar */}
       {isOpen && (
-        <div style={styles.sidebar}>
+        <div className="sidebar-container" style={styles.sidebar}>
           <div style={styles.sidebarContent}>
             {children}
           </div>

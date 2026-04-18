@@ -5,14 +5,8 @@ import discussionService from '../services/discussionService.js';
 import documentService from '../services/documentService.js';
 import summaryService from '../services/summaryService.js';
 import aiService from '../services/aiService.js';
-import ProjectInsights from '../models/ProjectInsights.js';
-import StrategicSignalEngine from '../core/intelligence/StrategicSignalEngine.js';
-// Entity knowledge model
-import Topic from '../models/Topic.js';
 import Decision from '../models/Decision.js';
-import Blocker from '../models/Blocker.js';
-import ActionItem from '../models/ActionItem.js';
-import ProjectState from '../models/ProjectState.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -562,36 +556,6 @@ router.post('/:projectId/discussions/:discussionId/summarize', async (req, res) 
       messageCountAtSummary
     );
 
-    // Trigger intelligence pipeline on the summary content so parallel discussion
-    // ideas enter the knowledge model only when explicitly promoted via summary.
-    try {
-      const InsightExtractor = (await import('../core/intelligence/InsightExtractor.js')).default;
-      const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
-      const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
-
-      const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
-      const extracted = await InsightExtractor.extractFromMessage({
-        projectId,
-        discussionId,
-        messageId: summary._id,
-        text: summaryContent,
-        username: 'Thread Summary',
-        isAI: false,
-        llmConfig,
-        callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator),
-        bypassRateLimit: true
-      });
-
-      await KnowledgeAggregator.mergeInsights({
-        projectId,
-        discussionId,
-        extracted: { ...extracted, messageId: summary._id }
-      });
-    } catch (pipelineErr) {
-      // Non-critical — summary is already saved
-      console.warn('Pipeline on summary failed (non-critical):', pipelineErr.message);
-    }
-
     res.json({ success: true, summary });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -655,55 +619,76 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// Force-refresh dashboard: re-runs extraction on main thread, then returns fresh dashboard
-router.post('/:projectId/dashboard/refresh', async (req, res) => {
+// Add to project memory (optimistic — saves immediately, normalizes async)
+router.post('/:projectId/decisions', async (req, res) => {
   try {
     const { projectId } = req.params;
+    const { messageId, discussionId } = req.body;
 
-    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
-    if (!isOwner) {
-      return res.status(403).json({ success: false, error: 'Only owner can refresh dashboard' });
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
-    const project = await projectService.getProjectById(projectId);
-    const discussions = await discussionService.getProjectDiscussions(projectId);
-    const mainDiscussion = discussions.find(d => d.isMain);
+    const Message = (await import('../models/Message.js')).default;
 
-    if (mainDiscussion) {
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ success: false, error: 'Message not found' });
+
+    // Save immediately with raw text
+    const decision = await Decision.create({
+      projectId,
+      text: message.text,
+      rationale: '',
+      proposedBy: { userId: message.userId, username: message.user },
+      sourceMessageId: messageId,
+      discussionId
+    });
+
+    // Respond instantly
+    res.json({ success: true, decision });
+
+    // Background: normalize via LLM, then embed the decision
+    (async () => {
       try {
-        const InsightExtractor = (await import('../core/intelligence/InsightExtractor.js')).default;
-        const KnowledgeAggregator = (await import('../core/intelligence/KnowledgeAggregator.js')).default;
         const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
+        const project = await projectService.getProjectById(projectId);
+        const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.\nSpeaker: ${message.user}\nRaw message: "${message.text}"\n\nWrite a single clean declarative statement capturing the decision made. Rules:\n- Start with a verb or technology name\n- Maximum 15 words\n- Never use first person\n- Never quote the raw text verbatim\n- If the message contains a clear reason, extract it as rationale separately\n\nReturn ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}\nRationale can be empty string if no clear reason given.`;
 
         const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
-        const extracted = await InsightExtractor.forceExtractForProject({
-          projectId,
-          discussionId: mainDiscussion._id,
-          llmConfig,
-          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+        const selectedModel = AIOrchestrator.selectModel(llmConfig);
+        const response = await AIOrchestrator.callProvider({
+          requestId: crypto.randomUUID(), provider: selectedModel.provider,
+          model: selectedModel.model, prompt, projectId, userId: req.user.userId, maxTokens: 1024
         });
-
-        await KnowledgeAggregator.mergeInsights({
-          projectId,
-          discussionId: mainDiscussion._id,
-          extracted
-        });
-      } catch (pipelineErr) {
-        console.warn('Force extraction failed (non-critical):', pipelineErr.message);
+        const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        await Decision.findByIdAndUpdate(decision._id, { text: parsed.text, rationale: parsed.rationale || '' });
+      } catch (e) {
+        console.warn('[decision-normalize] Background normalization failed:', e.message);
       }
-    }
-
-    // Return fresh dashboard after extraction
-    const result = await buildDashboardResponse(projectId);
-    return res.json({ success: true, dashboard: result });
+      // Embed the decision for semantic retrieval
+      try {
+        const EmbeddingService = (await import('../core/embeddings/EmbeddingService.js')).default;
+        const updatedDecision = await Decision.findById(decision._id);
+        const textToEmbed = updatedDecision.text + (updatedDecision.rationale ? '. ' + updatedDecision.rationale : '');
+        const embedding = await EmbeddingService.embedText(textToEmbed);
+        if (embedding) {
+          await Decision.findByIdAndUpdate(decision._id, { embedding, embeddingStatus: 'done' });
+          console.log('[decision-embed] Decision embedded successfully:', decision._id);
+        }
+      } catch (e) {
+        await Decision.findByIdAndUpdate(decision._id, { embeddingStatus: 'failed' });
+        console.warn('[decision-embed] Embedding failed:', e.message);
+      }
+    })();
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get dashboard insights (owner only)
-// Reads from entity model if available, falls back to ProjectInsights, then LLM.
-router.get('/:projectId/dashboard', async (req, res) => {
+// Get decision log
+router.get('/:projectId/decisions', async (req, res) => {
   try {
     const { projectId } = req.params;
 
@@ -712,244 +697,13 @@ router.get('/:projectId/dashboard', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
-    const dashboard = await buildDashboardResponse(projectId);
-    return res.json({ success: true, dashboard });
+    const Decision = (await import('../models/Decision.js')).default;
+    const decisions = await Decision.find({ projectId }).sort({ timestamp: -1 });
+
+    res.json({ success: true, decisions });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
-// ---------------------------------------------------------------------------
-// Shared dashboard builder — used by both GET and POST /refresh
-// ---------------------------------------------------------------------------
-async function buildDashboardResponse(projectId) {
-    // --- Shared metrics (always computed regardless of source) ---
-    const [discussions, documents] = await Promise.all([
-      discussionService.getProjectDiscussions(projectId),
-      documentService.getProjectDocuments(projectId)
-    ]);
-
-    // Load all messages once to avoid repeated queries
-    const allDiscMessages = await Promise.all(
-      discussions.map(d => discussionService.getDiscussionMessages(d._id))
-    );
-
-    let totalMessages = 0;
-    const activityByDay = Array(7).fill(0);
-    const participantStats = {};
-    const discussionStats = [];
-    let userMessages = 0;
-    let aiMessages = 0;
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-    discussions.forEach((disc, i) => {
-      const messages = allDiscMessages[i];
-      totalMessages += messages.length;
-      discussionStats.push({ title: disc.title, count: messages.length, isMain: disc.isMain });
-
-      messages.forEach(msg => {
-        if (msg.isAI) aiMessages++;
-        else userMessages++;
-
-        const msgDate = new Date(msg.timestamp);
-        if (msgDate >= sevenDaysAgo) {
-          const daysAgo = Math.floor((Date.now() - msgDate.getTime()) / 86400000);
-          if (daysAgo < 7) activityByDay[6 - daysAgo]++;
-        }
-
-        const username = msg.user?.username || msg.user || 'Unknown';
-        if (!msg.isAI && username !== 'Unknown') {
-          participantStats[username] = (participantStats[username] || 0) + 1;
-        }
-      });
-    });
-
-    const topParticipants = Object.entries(participantStats)
-      .map(([username, count]) => ({ username, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    const topDiscussions = [...discussionStats]
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    const sharedMetrics = {
-      totalMessages,
-      activeDiscussions: discussions.length,
-      documentCount: documents.length,
-      activity: activityByDay,
-      participants: topParticipants,
-      discussionBreakdown: topDiscussions,
-      messageTypes: { user: userMessages, ai: aiMessages }
-    };
-
-    // Strategic signals — always computed
-    const signals = await StrategicSignalEngine.generateSignals({ projectId });
-
-    // --- Route to correct data source ---
-    const hasEntityModel = await ProjectState.exists({ projectId });
-
-    if (hasEntityModel) {
-      return buildEntityDashboard(projectId, sharedMetrics, signals);
-    }
-
-    // Legacy: ProjectInsights
-    const insights = await ProjectInsights.findOne({ projectId }).lean();
-    if (insights) {
-      return buildLegacyDashboard(insights, sharedMetrics, signals);
-    }
-
-    // Last resort: LLM generation
-    const project = await projectService.getProjectById(projectId);
-    const llmInsights = await aiService.generateDashboardInsights(projectId, project.activeLLM);
-    return buildLLMDashboard(llmInsights, sharedMetrics, signals);
-}
-
-// ---------------------------------------------------------------------------
-// Entity model dashboard builder
-// ---------------------------------------------------------------------------
-async function buildEntityDashboard(projectId, sharedMetrics, signals) {
-  const [projectState, topics, decisions, blockers, actionItems, supersededDecisions] = await Promise.all([
-    ProjectState.findOne({ projectId }).lean(),
-    Topic.find({ projectId, status: 'stable' }).sort({ count: -1 }).limit(8).lean(),
-    Decision.find({ projectId, status: 'active', needsHumanValidation: { $ne: true } }).sort({ occurrenceCount: -1, createdAt: -1 }).limit(12).lean(),
-    // Show all unresolved blockers — single-instance ones from summaries are real and must be visible
-    Blocker.find({ projectId, resolved: false }).sort({ severity: -1, occurrenceCount: -1, createdAt: -1 }).limit(10).lean(),
-    ActionItem.find({ projectId, status: { $ne: 'completed' } }).sort({ occurrenceCount: -1, createdAt: -1 }).limit(10).lean(),
-    Decision.find({ projectId, status: 'superseded' }).sort({ updatedAt: -1 }).limit(5).lean()
-  ]);
-
-  // Build topic name lookup for enrichment
-  const topicNameMap = {};
-  topics.forEach(t => { topicNameMap[t._id.toString()] = t.name; });
-
-  const now = Date.now();
-
-  // Enrich decisions with topicName + rationale
-  const enrichedDecisions = decisions.map(d => ({
-    text: d.text,
-    rationale: d.rationale || '',
-    topicId: d.topicId,
-    topicName: d.topicId ? (topicNameMap[d.topicId.toString()] || '') : '',
-    timestamp: d.timestamp,
-    proposedBy: d.proposedBy?.username || null
-  }));
-
-  // Enrich blockers with daysOpen + topicName
-  const enrichedBlockers = blockers.map(b => ({
-    text: b.text,
-    severity: b.severity,
-    resolved: b.resolved,
-    topicName: b.topicId ? (topicNameMap[b.topicId.toString()] || '') : '',
-    daysOpen: b.raisedAt
-      ? Math.floor((now - new Date(b.raisedAt).getTime()) / 86400000)
-      : 0,
-    proposedBy: b.proposedBy?.username || null
-  }));
-
-  // Enrich action items with assignee
-  const enrichedActions = actionItems.map(a => ({
-    text: a.text,
-    status: a.status,
-    assignee: a.assignee || null,
-    topicName: a.topicId ? (topicNameMap[a.topicId.toString()] || '') : '',
-    proposedBy: a.proposedBy?.username || null
-  }));
-
-  // Enrich superseded decisions with what replaced them
-  const enrichedSuperseded = await Promise.all(supersededDecisions.map(async d => {
-    let supersededByText = null;
-    if (d.supersededBy) {
-      const newDecision = await Decision.findById(d.supersededBy).select('text').lean();
-      supersededByText = newDecision?.text || null;
-    }
-    return {
-      text: d.text,
-      supersededByText,
-      timestamp: d.timestamp,
-      topicName: d.topicId ? (topicNameMap[d.topicId.toString()] || '') : ''
-    };
-  }));
-
-  return {
-    source: 'entity-model',
-    topics: topics.map(t => ({ name: t.name, count: t.count })),
-    decisions: enrichedDecisions.map(d => d.text),
-    openQuestions: enrichedBlockers.filter(b => !b.resolved).map(b => b.text),
-    actionItems: enrichedActions.filter(a => a.status !== 'completed').map(a => a.text),
-    stage: projectState?.stage || 'ideation',
-    projectSummary: projectState?.summary || '',
-    lastUpdated: projectState?.lastUpdated || null,
-    enrichedDecisions,
-    enrichedBlockers,
-    enrichedActions,
-    enrichedSuperseded,
-    projectState: projectState ? {
-      stage: projectState.stage,
-      stageReason: projectState.stageReason,
-      summary: projectState.summary,
-      momentum: projectState.momentum,
-      openBlockerCount: projectState.openBlockerCount,
-      unresolvedActionCount: projectState.unresolvedActionCount,
-      activeTopicCount: projectState.activeTopicCount,
-      lastDecisionAt: projectState.lastDecisionAt
-    } : null,
-    signals,
-    ...sharedMetrics
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Legacy ProjectInsights dashboard builder (unchanged behaviour)
-// ---------------------------------------------------------------------------
-function buildLegacyDashboard(insights, sharedMetrics, signals) {
-  const filterGarbage = (items) => {
-    if (!Array.isArray(items)) return [];
-    return items.filter(item => {
-      const text = (typeof item === 'string' ? item : item?.text || '').toLowerCase().trim();
-      if (!text || text.length < 10) return false;
-      const garbage = ['none', 'none mentioned', 'no blockers', 'n/a', 'invalid token', 'access denied', 'discuss', 'decide on'];
-      return !garbage.some(g => text.includes(g));
-    });
-  };
-
-  return {
-    source: 'persistent',
-    topics: insights.topics.map(t => t.name).slice(0, 8),
-    decisions: filterGarbage(insights.decisions.map(d => d.text)).slice(0, 8),
-    openQuestions: filterGarbage(insights.blockers.filter(b => !b.resolved).map(b => b.text)).slice(0, 8),
-    actionItems: filterGarbage(insights.actionItems.filter(a => a.status !== 'completed').map(a => a.text)).slice(0, 8),
-    projectSummary: insights.projectSummary || '',
-    stage: insights.stage || 'ideation',
-    lastUpdated: insights.lastUpdated,
-    signals,
-    ...sharedMetrics
-  };
-}
-
-// ---------------------------------------------------------------------------
-// LLM fallback dashboard builder (first-time, no data)
-// ---------------------------------------------------------------------------
-function buildLLMDashboard(llmInsights, sharedMetrics, signals) {
-  const filterGarbage = (items) => {
-    if (!Array.isArray(items)) return [];
-    return items.filter(item => {
-      const text = (typeof item === 'string' ? item : '').toLowerCase().trim();
-      return text && text.length >= 10;
-    });
-  };
-
-  return {
-    source: 'llm-generated',
-    topics: filterGarbage(llmInsights.topics || []).slice(0, 8),
-    decisions: filterGarbage(llmInsights.decisions || []).slice(0, 8),
-    openQuestions: filterGarbage(llmInsights.blockers || []).slice(0, 8),
-    actionItems: filterGarbage(llmInsights.nextSteps || []).slice(0, 8),
-    projectSummary: llmInsights.projectSummary || '',
-    stage: llmInsights.stage || 'ideation',
-    signals,
-    ...sharedMetrics
-  };
-}
 
 export default router;

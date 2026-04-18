@@ -19,7 +19,7 @@ export const themes = {
       success: '#10a37f',
       error: '#ff6b6b',
       warning: '#ffa500',
-      iconBar: '#000000'
+      iconBar: '#111111'
     }
   },
   light: {

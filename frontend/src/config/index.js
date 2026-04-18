@@ -30,8 +30,7 @@ const config = {
       join: '/api/projects/join',
       discussions: (id) => `/api/projects/${id}/discussions`,
       documents: (id) => `/api/projects/${id}/documents`,
-      summary: (id) => `/api/projects/${id}/summary`,
-      insights: (id) => `/api/projects/${id}/insights`
+      summary: (id) => `/api/projects/${id}/summary`
     },
     discussions: {
       create: (projectId) => `/api/projects/${projectId}/discussions`,

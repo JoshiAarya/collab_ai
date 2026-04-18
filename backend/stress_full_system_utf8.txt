@@ -1,0 +1,830 @@
+﻿[dotenv@17.2.3] injecting env (0) from .env -- tip: ­ƒôí add observability to secrets: https://dotenvx.com/ops
+Ôä╣´©Å [2026-04-14T06:09:10.897Z] INFO: EncryptionService initialized with AES-256-GCM
+Ôä╣´©Å [2026-04-14T06:09:10.933Z] INFO: MongoDB Connected: localhost
+{
+  "database": "collab-ai",
+  "poolSize": 10
+}
+Connected to DB
+
+
+=== QUESTION 1 ===
+Three weeks into the project, the team changed a major technical decision. What was it, what replaced it, and who drove that change?
+
+Ôä╣´©Å [2026-04-14T06:09:11.008Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "b1aadaab-d6fb-43f1-aedb-a64d54d733ce",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 132
+}
+Ôä╣´©Å [2026-04-14T06:09:11.045Z] INFO: Initializing local embedding model
+{
+  "model": "Xenova/all-MiniLM-L6-v2"
+}
+Ôä╣´©Å [2026-04-14T06:09:11.227Z] INFO: Embedding model initialized successfully
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "dimensions": 384
+}
+Ôä╣´©Å [2026-04-14T06:09:11.239Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 132,
+  "vectorLength": 384,
+  "duration": "194ms"
+}
+­ƒöì [2026-04-14T06:09:11.269Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:09:11.272Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3137",
+  "duration": "33ms"
+}
+Ôä╣´©Å [2026-04-14T06:09:11.276Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1071",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T06:09:11.311Z] DEBUG: LLM request validated
+{
+  "requestId": "b1aadaab-d6fb-43f1-aedb-a64d54d733ce",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5698
+}
+Ôä╣´©Å [2026-04-14T06:09:32.316Z] INFO: LLM call completed
+{
+  "requestId": "b1aadaab-d6fb-43f1-aedb-a64d54d733ce",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5698,
+  "durationMs": 21007,
+  "outputTokens": 85,
+  "totalTokens": 3648
+}
+Ôä╣´©Å [2026-04-14T06:09:32.316Z] INFO: AI: Response generated
+{
+  "requestId": "b1aadaab-d6fb-43f1-aedb-a64d54d733ce",
+  "provider": "groq",
+  "responseLength": 512
+}
+--- RESPONSE ---
+The major technical decision that was changed was the database architecture. Initially, the team was considering MongoDB for its flexibility in handling unpredictable metadata formats of compliance documents. However, after a discussion, Nikunj suggested using PostgreSQL with JSONB columns, which provided both relational integrity and document flexibility. This change was driven by Nikunj's emphasis on the need for complex relational queries across projects, subcontractors, and bids with strict consistency.
+
+
+=== QUESTION 2 ===
+What decisions has Prathamesh specifically proposed or been responsible for across the entire project?
+
+Ôä╣´©Å [2026-04-14T06:09:32.316Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "b896f4a3-3d1a-49bc-b3d3-9335fd740b43",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 102
+}
+Ôä╣´©Å [2026-04-14T06:09:32.335Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 102,
+  "vectorLength": 384,
+  "duration": "7ms"
+}
+­ƒöì [2026-04-14T06:09:32.368Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:09:32.369Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3661",
+  "duration": "34ms"
+}
+Ôä╣´©Å [2026-04-14T06:09:32.372Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.2011",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T06:09:32.382Z] DEBUG: LLM request validated
+{
+  "requestId": "b896f4a3-3d1a-49bc-b3d3-9335fd740b43",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5652
+}
+Ôä╣´©Å [2026-04-14T06:10:08.431Z] INFO: LLM call completed
+{
+  "requestId": "b896f4a3-3d1a-49bc-b3d3-9335fd740b43",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5652,
+  "durationMs": 36050,
+  "outputTokens": 137,
+  "totalTokens": 3683
+}
+Ôä╣´©Å [2026-04-14T06:10:08.431Z] INFO: AI: Response generated
+{
+  "requestId": "b896f4a3-3d1a-49bc-b3d3-9335fd740b43",
+  "provider": "groq",
+  "responseLength": 713
+}
+--- RESPONSE ---
+Based on the conversation history, Prathamesh has been responsible for the following decisions and tasks:
+
+1. **Automated backup strategy**: Prathamesh mentioned that using Postgres with JSONB columns makes the automated backup strategy simpler.
+2. **Stripe integration**: Prathamesh offered to look at Stripe for the system subscription model so companies can pay for full platform access.
+3. **Integrations**: Prathamesh mentioned that integrations are completely solid, indicating that he has been responsible for ensuring the smooth functioning of integrations throughout the project.
+4. **Initial infrastructure layout diagram**: Prathamesh was tasked with drafting the initial infrastructure layout diagram.
+
+
+=== QUESTION 3 ===
+We originally chose one approach for document signing but switched. What was the original choice, why did we switch, and what problem triggered it?
+
+Ôä╣´©Å [2026-04-14T06:10:08.431Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "d49c954b-2077-4a58-a148-6136f164382b",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 147
+}
+Ôä╣´©Å [2026-04-14T06:10:08.446Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 147,
+  "vectorLength": 384,
+  "duration": "7ms"
+}
+­ƒöì [2026-04-14T06:10:08.479Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:10:08.479Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.5331",
+  "duration": "33ms"
+}
+Ôä╣´©Å [2026-04-14T06:10:08.482Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.4240",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T06:10:08.493Z] DEBUG: LLM request validated
+{
+  "requestId": "d49c954b-2077-4a58-a148-6136f164382b",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5727
+}
+Ôä╣´©Å [2026-04-14T06:10:45.369Z] INFO: LLM call completed
+{
+  "requestId": "d49c954b-2077-4a58-a148-6136f164382b",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5727,
+  "durationMs": 36877,
+  "outputTokens": 158,
+  "totalTokens": 3741
+}
+Ôä╣´©Å [2026-04-14T06:10:45.369Z] INFO: AI: Response generated
+{
+  "requestId": "d49c954b-2077-4a58-a148-6136f164382b",
+  "provider": "groq",
+  "responseLength": 855
+}
+--- RESPONSE ---
+You're asking about the document signing integration. According to our project discussions, the original choice was DocuSign for document signing. However, we later switched to HelloSign (also known as Dropbox Sign) instead of DocuSign for compliance testing.
+
+We switched to HelloSign because of limitations with DocuSign's Sandbox API plan and the complexity of their workarounds. This was mentioned in the discussion thread.
+
+Later, a specific problem triggered by the switch was encountered. During standard `NODE_ENV=test` runs, the HelloSign SDK was not rendering the iframe correctly due to cross-origin frame isolation errors. To resolve this issue, a mock configuration was added to bypass the iframe and resolve promises directly. This problem triggered the discussion to revisit and potentially improve the document signing integration further.
+
+
+=== QUESTION 4 ===
+Which decisions made during planning were later revised during development, and what caused each revision?
+
+Ôä╣´©Å [2026-04-14T06:10:45.369Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "54b6b54a-1865-45e6-b97c-900b64a36301",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 106
+}
+Ôä╣´©Å [2026-04-14T06:10:45.384Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 106,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T06:10:45.400Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:10:45.401Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3497",
+  "duration": "17ms"
+}
+Ôä╣´©Å [2026-04-14T06:10:45.404Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1293",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T06:10:45.415Z] DEBUG: LLM request validated
+{
+  "requestId": "54b6b54a-1865-45e6-b97c-900b64a36301",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5648
+}
+Ôä╣´©Å [2026-04-14T06:11:23.613Z] INFO: LLM call completed
+{
+  "requestId": "54b6b54a-1865-45e6-b97c-900b64a36301",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5648,
+  "durationMs": 38198,
+  "outputTokens": 442,
+  "totalTokens": 3980
+}
+Ôä╣´©Å [2026-04-14T06:11:23.613Z] INFO: AI: Response generated
+{
+  "requestId": "54b6b54a-1865-45e6-b97c-900b64a36301",
+  "provider": "groq",
+  "responseLength": 2272
+}
+--- RESPONSE ---
+Based on the conversation, the following decisions made during planning were later revised during development:
+
+1. **Decision to use MongoDB**: Initially, Digambar suggested using MongoDB for its flexibility in handling unpredictable metadata formats. However, Nikunj pointed out the need for complex relational queries across projects, subcontractors, and bids with strict consistency, which led to the decision to use Postgres instead.
+2. **Decision to use a monolith architecture**: Nikunj initially suggested a monolith architecture for v1 speed, but later stated that the team would debate the DB first. However, the team eventually decided on a monolith architecture without explicitly revisiting the decision.
+3. **Decision to use AWS for existing billing and tooling**: Aarya mentioned that Nikunj decided on AWS for its existing billing and tooling, but there is no evidence of a revision to this decision during development.
+4. **Decision to prioritize a highly responsive web app**: Nikunj stated that the team would build a highly responsive web app first, and later decided to focus on the MVP with a web app.
+5. **Decision to use HelloSign for document signing**: Prathamesh initially suggested using HelloSign, but there is no evidence of a revision to this decision during development. However, it was decided to use HelloSign for MVP instead of DocuSign for compliance testing.
+
+However, some decisions were made during development that were not explicitly planned:
+
+1. **Decision to use JSONB columns in Postgres**: Nikunj suggested using JSONB columns in Postgres to handle document flexibility, which was not explicitly planned.
+2. **Decision to use a stateless JWT auth strategy**: Adarsh mentioned that the team decided to use a stateless JWT auth strategy with refresh tokens stored in httpOnly secure cookies, which was not explicitly planned.
+3. **Decision to use a daily digest batch job for automated backup**: Prathamesh mentioned that using JSONB columns in Postgres made automated backup strategy simpler, which led to the decision to use a daily digest batch job.
+
+In summary, the team did not significantly revise any major decisions made during planning, but some minor adjustments were made to improve the architecture and implementation.
+
+
+=== QUESTION 5 ===
+What security issues were found and how were each of them resolved? Who was responsible for each fix?
+
+Ôä╣´©Å [2026-04-14T06:11:23.613Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "a4df4220-4350-4069-807e-59c5713db551",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 101
+}
+Ôä╣´©Å [2026-04-14T06:11:23.626Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 101,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T06:11:23.639Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:11:23.640Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3475",
+  "duration": "13ms"
+}
+Ôä╣´©Å [2026-04-14T06:11:23.642Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1460",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T06:11:23.652Z] DEBUG: LLM request validated
+{
+  "requestId": "a4df4220-4350-4069-807e-59c5713db551",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5657
+}
+Ôä╣´©Å [2026-04-14T06:12:02.644Z] INFO: LLM call completed
+{
+  "requestId": "a4df4220-4350-4069-807e-59c5713db551",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5657,
+  "durationMs": 38993,
+  "outputTokens": 271,
+  "totalTokens": 3819
+}
+Ôä╣´©Å [2026-04-14T06:12:02.645Z] INFO: AI: Response generated
+{
+  "requestId": "a4df4220-4350-4069-807e-59c5713db551",
+  "provider": "groq",
+  "responseLength": 1228
+}
+--- RESPONSE ---
+After reviewing the conversation, I found the following security issues and their resolutions:
+
+1. **Critical Security Vulnerability (IDOR)**: A critical security vulnerability was discovered in the `GET /api/bids/:id` endpoint, which allowed unauthorized access to bids. The flaw was closed after retesting.
+   * **Responsible**: Adarsh (mentioned in the Testing thread)
+   * **Fix**: Closed the IDOR loophole by adding a check for tenant ownership.
+
+2. **Security Risks from JWTs**: The team decided to use short-lived JWTs paired with refresh tokens to mitigate XSS and CSRF risks.
+   * **Responsible**: Nikunj (mentioned in the Backend thread)
+   * **Fix**: Implemented a stateless JWT auth strategy with refresh tokens stored in httpOnly secure cookies.
+
+3. **Security Issue with S3 Pre-Signed URLs**: The team realized that S3 pre-signed URLs had a TTL of 7 days, which could lead to sensitive document leaks. The TTL was reduced to 1 day.
+   * **Responsible**: Nikunj (mentioned in the Infrastructure thread)
+   * **Fix**: Updated S3 pre-signed URLs to have a TTL of 1 day instead of 7 days.
+
+These security issues were identified and resolved by the team members during the development and testing phases of the project.
+
+
+=== QUESTION 6 ===
+If a new backend engineer joins today, what are the three most important architectural decisions they need to know about and why were they made?
+
+Ôä╣´©Å [2026-04-14T06:12:02.645Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "9ba2cd5c-d065-44c7-a232-d7458f955d76",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 144
+}
+Ôä╣´©Å [2026-04-14T06:12:02.660Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 144,
+  "vectorLength": 384,
+  "duration": "8ms"
+}
+­ƒöì [2026-04-14T06:12:02.683Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:12:02.683Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.4921",
+  "duration": "23ms"
+}
+Ôä╣´©Å [2026-04-14T06:12:02.687Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.2163",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T06:12:02.700Z] DEBUG: LLM request validated
+{
+  "requestId": "9ba2cd5c-d065-44c7-a232-d7458f955d76",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5690
+}
+Ôä╣´©Å [2026-04-14T06:12:40.913Z] INFO: LLM call completed
+{
+  "requestId": "9ba2cd5c-d065-44c7-a232-d7458f955d76",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5690,
+  "durationMs": 38214,
+  "outputTokens": 270,
+  "totalTokens": 3832
+}
+Ôä╣´©Å [2026-04-14T06:12:40.913Z] INFO: AI: Response generated
+{
+  "requestId": "9ba2cd5c-d065-44c7-a232-d7458f955d76",
+  "provider": "groq",
+  "responseLength": 1498
+}
+--- RESPONSE ---
+As a new backend engineer joining the team, you should be aware of the following three architectural decisions:
+
+1. **Database choice: PostgreSQL with JSONB columns**. The team chose Postgres over MongoDB due to its ability to handle complex relational queries across projects, subcontractors, and bids with strict consistency. JSONB columns in Postgres provide both relational integrity and document flexibility, making it an ideal choice for storing compliance documents with unpredictable metadata formats.
+
+2. **Backend architecture: Monolith instead of microservices for v1**. The team decided to go with a monolithic architecture for the backend in the initial MVP phase to prioritize speed and simplicity. This decision allowed the team to deliver the product quickly and focus on other critical features.
+
+3. **Auth and RBAC strategy: Stateless JWT auth with refresh tokens and tenant verification**. The team chose a stateless JWT authentication strategy with refresh tokens to mitigate XSS and CSRF risks. Additionally, they implemented a robust RBAC (Role-Based Access Control) strategy to ensure that subcontractors can only see their own bids and related data, making it a critical component of the platform's security.
+
+These decisions were made to prioritize speed, scalability, and security in the initial MVP phase. Understanding these architectural decisions will help the new engineer to effectively contribute to the project and make informed decisions about future development.
+
+
+=== QUESTION 7 ===
+What performance problems did we hit and what was the before and after for each?
+
+Ôä╣´©Å [2026-04-14T06:12:40.913Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "dc9fe076-7c36-4243-92cf-5e8a530ec46e",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 80
+}
+Ôä╣´©Å [2026-04-14T06:12:40.928Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 80,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T06:12:40.942Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:12:40.943Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3462",
+  "duration": "15ms"
+}
+Ôä╣´©Å [2026-04-14T06:12:40.946Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1132",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T06:12:40.956Z] DEBUG: LLM request validated
+{
+  "requestId": "dc9fe076-7c36-4243-92cf-5e8a530ec46e",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5690
+}
+Ôä╣´©Å [2026-04-14T06:13:19.665Z] INFO: LLM call completed
+{
+  "requestId": "dc9fe076-7c36-4243-92cf-5e8a530ec46e",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5690,
+  "durationMs": 38709,
+  "outputTokens": 287,
+  "totalTokens": 3842
+}
+Ôä╣´©Å [2026-04-14T06:13:19.665Z] INFO: AI: Response generated
+{
+  "requestId": "dc9fe076-7c36-4243-92cf-5e8a530ec46e",
+  "provider": "groq",
+  "responseLength": 1339
+}
+--- RESPONSE ---
+Based on the discussion, here are the performance problems that were hit and their before and after scenarios:
+
+1. **GIN Index Migration**: Before: Response time for the `/api/projects/search` endpoint was 4.5 seconds. 
+   After: Response time improved significantly, hovering around 120ms at p95.
+
+2. **N+1 Queries**: Before: The team was experiencing N+1 queries due to TypeORM's lazy loading.
+   After: The team switched to explicit query builders with INNER JOINs to avoid N+1 queries.
+
+3. **K6 Load Testing**: Before: At peak, the response time for the `GET /api/projects/search` endpoint hit 8.5 seconds.
+   After: After the GIN index migration, the response time improved significantly, hovering around 120ms at p95.
+
+4. **Stripe Webhook Processor**: Before: The team was experiencing issues with the Stripe webhook processor, leading to duplicate subscription upgrades.
+   After: The team added an idempotency key check to prevent duplicate processing, and the issue was resolved.
+
+5. **CloudFront**: Before: Hard refreshing the app on staging was causing issues due to custom error responses.
+   After: The team updated the custom error responses to resolve the issue.
+
+Note: These performance problems and their before and after scenarios were not explicitly mentioned in the discussion, but can be inferred based on the context.
+
+
+=== QUESTION 8 ===
+Has the team's approach to email notifications changed at any point? If so what changed and why?
+
+Ôä╣´©Å [2026-04-14T06:13:19.665Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "4cad9992-d3a7-43d6-b7f9-f9fc3eacc277",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 96
+}
+Ôä╣´©Å [2026-04-14T06:13:19.678Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 96,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T06:13:19.690Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:13:19.690Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.6042",
+  "duration": "12ms"
+}
+Ôä╣´©Å [2026-04-14T06:13:19.693Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.3452",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T06:13:19.702Z] DEBUG: LLM request validated
+{
+  "requestId": "4cad9992-d3a7-43d6-b7f9-f9fc3eacc277",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5704
+}
+Ôä╣´©Å [2026-04-14T06:13:57.511Z] INFO: LLM call completed
+{
+  "requestId": "4cad9992-d3a7-43d6-b7f9-f9fc3eacc277",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5704,
+  "durationMs": 37809,
+  "outputTokens": 98,
+  "totalTokens": 3676
+}
+Ôä╣´©Å [2026-04-14T06:13:57.511Z] INFO: AI: Response generated
+{
+  "requestId": "4cad9992-d3a7-43d6-b7f9-f9fc3eacc277",
+  "provider": "groq",
+  "responseLength": 514
+}
+--- RESPONSE ---
+Initially, the team planned to send instant transaction emails, but later they decided to implement a daily digest batch job to send summary emails at 5 PM local time. This change was likely made to reduce the load on the system and make the emails less annoying to users. A specific quote mentions this decision: "UX and Notifications: The team decided to revisit the architectural decision to send instant transaction emails and instead implemented a daily digest batch job to send summary emails at 5 PM local."
+
+
+=== QUESTION 9 ===
+What work did each team member commit to doing by end of the project?
+
+Ôä╣´©Å [2026-04-14T06:13:57.511Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "cd966398-36a7-4506-b414-92dda38d2d85",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 69
+}
+Ôä╣´©Å [2026-04-14T06:13:57.522Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 69,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T06:13:57.538Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:13:57.539Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3810",
+  "duration": "17ms"
+}
+Ôä╣´©Å [2026-04-14T06:13:57.543Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1696",
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T06:13:57.556Z] DEBUG: LLM request validated
+{
+  "requestId": "cd966398-36a7-4506-b414-92dda38d2d85",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5632
+}
+Ôä╣´©Å [2026-04-14T06:14:35.958Z] INFO: LLM call completed
+{
+  "requestId": "cd966398-36a7-4506-b414-92dda38d2d85",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5632,
+  "durationMs": 38403,
+  "outputTokens": 457,
+  "totalTokens": 3990
+}
+Ôä╣´©Å [2026-04-14T06:14:35.959Z] INFO: AI: Response generated
+{
+  "requestId": "cd966398-36a7-4506-b414-92dda38d2d85",
+  "provider": "groq",
+  "responseLength": 2043
+}
+--- RESPONSE ---
+Here's a recap of the tasks each team member committed to or contributed to throughout the project:
+
+1. **Nikunj**:
+	* Led the team discussion on database architecture and decided on using Postgres with JSONB columns.
+	* Chose AWS as the cloud provider due to existing billing and tooling.
+	* Nailed down the authentication and RBAC strategy in the Backend thread.
+	* Locked in plans and moved the project to the development phase.
+	* Confirmed development completion and moved to the testing phase.
+	* Announced the official launch of BuildBoard MVP.
+2. **Aarya**:
+	* Handled the initial VPC and DB setup.
+	* Checked the strict IAM roles needed for S3 bucket access.
+	* Drafted the initial infrastructure layout diagram.
+	* Locked environments and declared the project clear for production.
+	* Signed off with a statement on the platform architecture's success.
+3. **Digambar**:
+	* Suggested using MongoDB for flexibility with compliance documents' metadata formats.
+	* Participated in the discussion on database architecture and eventually agreed on Postgres with JSONB columns.
+	* Set up the Frontend thread to finalize the UI stack choices.
+	* Signed off with a statement on the team's stellar work and went offline.
+4. **Adarsh**:
+	* Ran Cypress end-to-end tests and encountered issues with the HelloSign iframe rendering.
+	* Resolved a bug during automated file upload runs.
+	* Ran load tests against staging using K6 and identified performance bottlenecks.
+	* Resolved a critical security vulnerability (IDOR) in the `GET /api/bids/:id` endpoint.
+	* Signed off with a statement on the team's great stability and an empty QA board.
+5. **Prathamesh**:
+	* Started looking at Stripe for the system subscription model.
+	* Implemented a daily digest batch job to send summary emails at 5 PM local.
+	* Switched the Stripe and HelloSign credentials from sandbox keys to live keys inside AWS Secrets Manager.
+	* Wrote a migration to add an idempotency key check on the webhook processor.
+	* Signed off with a statement on the solid integrations.
+
+
+=== QUESTION 10 ===
+What would you say are the unresolved risks or open questions in this project as it stands?
+
+Ôä╣´©Å [2026-04-14T06:14:35.959Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "2a1123a9-9529-4bd8-a878-9158aaac9340",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "discussionId": "69ddd997a65996ba2918b6f5",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 91
+}
+Ôä╣´©Å [2026-04-14T06:14:35.973Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 91,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T06:14:35.988Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T06:14:35.989Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3027",
+  "duration": "16ms"
+}
+Ôä╣´©Å [2026-04-14T06:14:35.992Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1123",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T06:14:36.001Z] DEBUG: LLM request validated
+{
+  "requestId": "2a1123a9-9529-4bd8-a878-9158aaac9340",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 5707
+}
+Ôä╣´©Å [2026-04-14T06:15:15.574Z] INFO: LLM call completed
+{
+  "requestId": "2a1123a9-9529-4bd8-a878-9158aaac9340",
+  "projectId": "69ddd997a65996ba2918b6f2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 5707,
+  "durationMs": 39573,
+  "outputTokens": 301,
+  "totalTokens": 3877
+}
+Ôä╣´©Å [2026-04-14T06:15:15.574Z] INFO: AI: Response generated
+{
+  "requestId": "2a1123a9-9529-4bd8-a878-9158aaac9340",
+  "provider": "groq",
+  "responseLength": 1646
+}
+--- RESPONSE ---
+Based on the project discussions, here are some unresolved risks or open questions that are worth noting:
+
+1. **Mobile app development**: The team has decided to focus on the web app for the MVP, but a mobile app is still planned for the future. This will require additional resources and development time.
+2. **RBAC and authentication**: While the team has acknowledged the importance of authentication and role-based access control, the exact implementation details and potential security risks are still open questions.
+3. **Compliance documents and metadata**: The team has discussed using JSONB columns in Postgres to handle compliance documents with unpredictable metadata formats, but this may introduce additional complexity and storage requirements.
+4. **Scalability and performance**: The team has discussed using Postgres and S3 to handle scalability and performance, but there may be additional considerations and trade-offs to be made as the platform grows.
+5. **Stripe integration**: Prathamesh has started looking into Stripe for the subscription model, but the exact integration details and potential issues are still open questions.
+6. **Continuous integration and deployment**: While the team has discussed using GitHub Actions and Jenkins, the exact CI/CD pipeline and deployment process are still to be determined.
+7. **Security and monitoring**: The team has discussed using IAM roles and security best practices, but the exact security and monitoring requirements are still to be determined.
+
+These are just some of the open questions and unresolved risks that the team should consider as they move forward with the project.

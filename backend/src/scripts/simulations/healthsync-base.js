@@ -3,14 +3,13 @@ import connectDB from '../../config/database.js';
 import authService from '../../services/authService.js';
 import projectService from '../../services/projectService.js';
 import discussionService from '../../services/discussionService.js';
-import InsightExtractor from '../../core/intelligence/InsightExtractor.js';
-import KnowledgeAggregator from '../../core/intelligence/KnowledgeAggregator.js';
 import AIOrchestrator from '../../core/orchestrator/AIOrchestrator.js';
 import Project from '../../models/Project.js';
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function runSimulation({ projectTitle, projectDesc, usersToCreate, conversations }) {
@@ -20,7 +19,82 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
 
   const normalizedTitle = projectTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   const LOG_FILE = path.join(__dirname, `../../../simulate-${normalizedTitle}.log`);
-  const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
+  
+// ─── Manual Decision Extraction ──────────────────────────────────────────────
+async function triggerDecisionAPI(projectId, messageId, text, username, discussionId) {
+
+  try {
+    const AIOrchestrator = (await import('../../core/orchestrator/AIOrchestrator.js')).default;
+    const Decision = (await import('../../models/Decision.js')).default;
+    const EmbeddingService = (await import('../../core/embeddings/EmbeddingService.js')).default;
+    const User = (await import('../../models/User.js')).default;
+
+    const user = await User.findOne({ username });
+
+    const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.
+Speaker: ${username}
+Raw message: "${text}"
+
+Write a single clean declarative statement capturing the decision made. Rules:
+- Start with a verb or technology name
+- Maximum 15 words
+- Never use first person
+- Never quote the raw text verbatim
+- If the message contains a clear reason, extract it as rationale separately
+
+Return ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}
+Rationale can be empty string if no clear reason given.`;
+
+    const response = await AIOrchestrator.callProvider({
+        requestId: crypto.randomUUID(),
+        provider: 'groq',
+        model: 'llama-3.1-8b-instant',
+        systemPrompt: 'You are an AI decision extractor.',
+        prompt,
+        projectId,
+        userId: user._id,
+        maxTokens: 1024
+    });
+
+    let parsed;
+    try {
+      const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch(e) {
+      write('         ↳ error parsing LLM response\n');
+      return;
+    }
+
+    const decision = await Decision.create({
+      projectId,
+      text: parsed.text,
+      rationale: parsed.rationale || '',
+      proposedBy: {
+        userId: user._id,
+        username
+      },
+      sourceMessageId: messageId,
+      discussionId
+    });
+
+    // Embed the decision for semantic retrieval
+    try {
+      const textToEmbed = parsed.text + (parsed.rationale ? '. ' + parsed.rationale : '');
+      const embedding = await EmbeddingService.embedText(textToEmbed);
+      if (embedding) {
+        await Decision.findByIdAndUpdate(decision._id, { embedding, embeddingStatus: 'done' });
+      }
+    } catch (embedErr) {
+      await Decision.findByIdAndUpdate(decision._id, { embeddingStatus: 'failed' });
+    }
+    write(`         ↳ decision saved: ${parsed.text.substring(0, 40)}\n`);
+  } catch (err) {
+    write(`         ↳ decision fail: ${err.message}\n`);
+  }
+}
+
+
+const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
 
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
   const origStderrWrite = process.stderr.write.bind(process.stderr);
@@ -112,7 +186,7 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
   const timeStep = Math.floor((30 * 24 * 60 * 60 * 1000) / (conversations.length || 1));
 
   for (let i = 0; i < conversations.length; i++) {
-    const { thread, user: username, text } = conversations[i];
+    const { thread, user: username, text, isDecision } = conversations[i];
     const user = userMap[username];
     const discussion = threadsMap[thread];
 
@@ -125,49 +199,10 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
 
     write(`  [${String(i + 1).padStart(2, '0')}/${conversations.length}] [${thread}] ${username}: ${text.substring(0, 72)}...\n`);
 
-    if (text.length >= 30) {
-      if (discussion.isMain) {
-        try {
-          const extracted = await InsightExtractor.extractFromMessage({
-            projectId: project._id,
-            discussionId: discussion._id,
-            messageId: message._id,
-            text,
-            username,
-            isAI: false,
-            llmConfig,
-            callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
-          });
-
-          await KnowledgeAggregator.mergeInsights({
-            projectId: project._id,
-            discussionId: discussion._id,
-            extracted: { ...extracted, messageId: message._id }
-          });
-
-          const total = extracted.topics.length + extracted.decisions.length +
-            extracted.blockers.length + extracted.actionItems.length;
-          if (total > 0) {
-            write(`         ↳ ${extracted.decisions.length}d ${extracted.blockers.length}b ${extracted.actionItems.length}a ${extracted.topics.length}t\n`);
-            if (extracted.topics.length)
-              write(`            topics:    ${extracted.topics.map(t => t.name).join(' | ')}\n`);
-            if (extracted.decisions.length)
-              write(`            decisions: ${extracted.decisions.map(d => d.text.substring(0, 60)).join(' | ')}\n`);
-            if (extracted.blockers.length)
-              write(`            blockers:  ${extracted.blockers.map(b => b.text.substring(0, 60)).join(' | ')}\n`);
-            if (extracted.actionItems.length)
-              write(`            actions:   ${extracted.actionItems.map(a => a.text.substring(0, 60)).join(' | ')}\n`);
-          } else {
-            write(`         ↳ skipped (rate gate or overlap guard)\n`);
-          }
-        } catch (err) {
-          write(`         ↳ skipped (${err.message})\n`);
-        }
-      } else {
-        write(`         ↳ skipped (not main thread — waits for summary)\n`);
-      }
+    if (isDecision) {
+      await triggerDecisionAPI(project._id, message._id, text, username, discussion._id);
     }
-
+    
     if (DELAY_MS > 0) await sleep(DELAY_MS);
   }
 
@@ -197,22 +232,6 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
           await Message.countDocuments({ discussionId: disc._id })
         );
 
-        const extracted = await InsightExtractor.extractFromMessage({
-          projectId: project._id,
-          discussionId: disc._id,
-          messageId: savedSummary._id,
-          text: summaryContent,
-          username: 'Thread Summary',
-          isAI: false,
-          llmConfig,
-          callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator),
-          bypassRateLimit: true
-        });
-        await KnowledgeAggregator.mergeInsights({
-          projectId: project._id,
-          discussionId: disc._id,
-          extracted: { ...extracted, messageId: savedSummary._id }
-        });
       } catch (err) {
         log(`Failed to summarize ${threadName}: ${err.message}`);
       }

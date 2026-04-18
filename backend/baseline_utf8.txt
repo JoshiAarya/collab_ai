@@ -1,0 +1,577 @@
+﻿[dotenv@17.2.3] injecting env (0) from .env -- tip: ­ƒöÉ prevent building .env in docker: https://dotenvx.com/prebuild
+Ôä╣´©Å [2026-04-14T04:58:33.700Z] INFO: EncryptionService initialized with AES-256-GCM
+Ôä╣´©Å [2026-04-14T04:58:33.735Z] INFO: MongoDB Connected: localhost
+{
+  "database": "collab-ai",
+  "poolSize": 10
+}
+Connected to DB
+
+
+=== QUESTION 1 ===
+Why did the team choose Postgres over MongoDB?
+
+Ôä╣´©Å [2026-04-14T04:58:33.792Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "6749e66a-fd7a-4f68-99aa-2f1cd3c201c2",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 46
+}
+Ôä╣´©Å [2026-04-14T04:58:33.830Z] INFO: Initializing local embedding model
+{
+  "model": "Xenova/all-MiniLM-L6-v2"
+}
+Ôä╣´©Å [2026-04-14T04:58:34.094Z] INFO: Embedding model initialized successfully
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "dimensions": 384
+}
+Ôä╣´©Å [2026-04-14T04:58:34.109Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 46,
+  "vectorLength": 384,
+  "duration": "279ms"
+}
+­ƒöì [2026-04-14T04:58:34.120Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:34.169Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:34.203Z] DEBUG: LLM request validated
+{
+  "requestId": "6749e66a-fd7a-4f68-99aa-2f1cd3c201c2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5215
+}
+Ôä╣´©Å [2026-04-14T04:58:34.954Z] INFO: LLM call completed
+{
+  "requestId": "6749e66a-fd7a-4f68-99aa-2f1cd3c201c2",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5215,
+  "durationMs": 752,
+  "outputTokens": 86,
+  "totalTokens": 3180
+}
+Ôä╣´©Å [2026-04-14T04:58:34.954Z] INFO: AI: Response generated
+{
+  "requestId": "6749e66a-fd7a-4f68-99aa-2f1cd3c201c2",
+  "provider": "groq",
+  "responseLength": 501
+}
+--- RESPONSE ---
+The team chose Postgres over MongoDB because they needed to perform complex relational queries across projects, subcontractors, and bids, and required strict consistency. Although MongoDB offers flexibility, Postgres was preferred due to its ability to handle relational queries and provide strict consistency. Additionally, Postgres' JSONB columns can be used to store flexible document data, such as compliance files, which addressed the team's concern about handling unpredictable metadata formats.
+
+
+=== QUESTION 2 ===
+Who proposed switching to HelloSign and why?
+
+Ôä╣´©Å [2026-04-14T04:58:34.954Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "ab2715cf-d6d4-4ff3-a343-e3534a99674e",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 44
+}
+Ôä╣´©Å [2026-04-14T04:58:34.969Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 44,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T04:58:34.970Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:34.971Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:34.981Z] DEBUG: LLM request validated
+{
+  "requestId": "ab2715cf-d6d4-4ff3-a343-e3534a99674e",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5214
+}
+Ôä╣´©Å [2026-04-14T04:58:35.397Z] INFO: LLM call completed
+{
+  "requestId": "ab2715cf-d6d4-4ff3-a343-e3534a99674e",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5214,
+  "durationMs": 417,
+  "outputTokens": 31,
+  "totalTokens": 3124
+}
+Ôä╣´©Å [2026-04-14T04:58:35.397Z] INFO: AI: Response generated
+{
+  "requestId": "ab2715cf-d6d4-4ff3-a343-e3534a99674e",
+  "provider": "groq",
+  "responseLength": 155
+}
+--- RESPONSE ---
+The team decided to use HelloSign (Dropbox Sign) for document signing integration, replacing DocuSign due to limitations in handling dynamic custom fields.
+
+
+=== QUESTION 3 ===
+What was the search performance issue and how was it resolved?
+
+Ôä╣´©Å [2026-04-14T04:58:35.397Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "c15ec51c-282b-4c18-b7eb-6f1dd5e8edf6",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 62
+}
+Ôä╣´©Å [2026-04-14T04:58:35.410Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 62,
+  "vectorLength": 384,
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T04:58:35.412Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:35.413Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:35.425Z] DEBUG: LLM request validated
+{
+  "requestId": "c15ec51c-282b-4c18-b7eb-6f1dd5e8edf6",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5220
+}
+Ôä╣´©Å [2026-04-14T04:58:36.981Z] INFO: LLM call completed
+{
+  "requestId": "c15ec51c-282b-4c18-b7eb-6f1dd5e8edf6",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5220,
+  "durationMs": 1557,
+  "outputTokens": 80,
+  "totalTokens": 3176
+}
+Ôä╣´©Å [2026-04-14T04:58:36.981Z] INFO: AI: Response generated
+{
+  "requestId": "c15ec51c-282b-4c18-b7eb-6f1dd5e8edf6",
+  "provider": "groq",
+  "responseLength": 388
+}
+--- RESPONSE ---
+The search performance issue was related to the `/api/projects/search` endpoint, which was taking around 8.5 seconds to respond at peak load during load testing. This issue was resolved by applying a GIN (Generalized Inverted Index) index migration to the database, which significantly improved the query performance. After the migration, the response time dropped to around 120ms at p95.
+
+
+=== QUESTION 4 ===
+What is the current authentication approach?
+
+Ôä╣´©Å [2026-04-14T04:58:36.981Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "f08110d1-ebf2-42c2-b8c8-c1258b85a029",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 44
+}
+Ôä╣´©Å [2026-04-14T04:58:36.995Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 44,
+  "vectorLength": 384,
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T04:58:36.996Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:36.998Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:37.013Z] DEBUG: LLM request validated
+{
+  "requestId": "f08110d1-ebf2-42c2-b8c8-c1258b85a029",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5214
+}
+Ôä╣´©Å [2026-04-14T04:58:52.853Z] INFO: LLM call completed
+{
+  "requestId": "f08110d1-ebf2-42c2-b8c8-c1258b85a029",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5214,
+  "durationMs": 15841,
+  "outputTokens": 76,
+  "totalTokens": 3167
+}
+Ôä╣´©Å [2026-04-14T04:58:52.853Z] INFO: AI: Response generated
+{
+  "requestId": "f08110d1-ebf2-42c2-b8c8-c1258b85a029",
+  "provider": "groq",
+  "responseLength": 377
+}
+--- RESPONSE ---
+The team decided to use short-lived JWTs (JSON Web Tokens) paired with refresh tokens stored in httpOnly secure cookies to mitigate XSS (Cross-Site Scripting) and CSRF (Cross-Site Request Forgery) risks while maintaining stateless scalability. The authentication strategy, including RBAC (Role-Based Access Control), was further discussed and nailed down in the Backend thread.
+
+
+=== QUESTION 5 ===
+Who is responsible for setting up the Firecracker microVM pool?
+
+Ôä╣´©Å [2026-04-14T04:58:52.853Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "7e05ea70-7629-44e1-9c23-e755f836cb4b",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 63
+}
+Ôä╣´©Å [2026-04-14T04:58:52.870Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 63,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T04:58:52.872Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:52.873Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:58:52.886Z] DEBUG: LLM request validated
+{
+  "requestId": "7e05ea70-7629-44e1-9c23-e755f836cb4b",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5220
+}
+Ôä╣´©Å [2026-04-14T04:59:09.492Z] INFO: LLM call completed
+{
+  "requestId": "7e05ea70-7629-44e1-9c23-e755f836cb4b",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5220,
+  "durationMs": 16607,
+  "outputTokens": 51,
+  "totalTokens": 3149
+}
+Ôä╣´©Å [2026-04-14T04:59:09.492Z] INFO: AI: Response generated
+{
+  "requestId": "7e05ea70-7629-44e1-9c23-e755f836cb4b",
+  "provider": "groq",
+  "responseLength": 281
+}
+--- RESPONSE ---
+The conversation doesn't mention anyone being responsible for setting up the Firecracker microVM pool. The team discussed various aspects of the BuildBoard project, including database architecture, authentication, and infrastructure, but Firecracker microVM pool was not mentioned.
+
+
+=== QUESTION 6 ===
+What container orchestration strategy did the team decide on and why?
+
+Ôä╣´©Å [2026-04-14T04:59:09.492Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "1b5ae0b8-50d5-4930-ba3e-9052656f2060",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 69
+}
+Ôä╣´©Å [2026-04-14T04:59:09.505Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 69,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T04:59:09.507Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:09.508Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:09.517Z] DEBUG: LLM request validated
+{
+  "requestId": "1b5ae0b8-50d5-4930-ba3e-9052656f2060",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5223
+}
+Ôä╣´©Å [2026-04-14T04:59:25.364Z] INFO: LLM call completed
+{
+  "requestId": "1b5ae0b8-50d5-4930-ba3e-9052656f2060",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5223,
+  "durationMs": 15847,
+  "outputTokens": 86,
+  "totalTokens": 3183
+}
+Ôä╣´©Å [2026-04-14T04:59:25.364Z] INFO: AI: Response generated
+{
+  "requestId": "1b5ae0b8-50d5-4930-ba3e-9052656f2060",
+  "provider": "groq",
+  "responseLength": 448
+}
+--- RESPONSE ---
+The team decided to use Amazon ECS (Elastic Container Service) with Fargate for serverless Docker execution. They chose this strategy because of the current engineering footprint, implying that it was the most suitable option given their existing resources and expertise. Additionally, they opted for ECS over EKS (Kubernetes) likely due to the simplicity and managed nature of ECS, which aligns with their goal of rapid development and deployment.
+
+
+=== QUESTION 7 ===
+What was the security vulnerability found during testing?
+
+Ôä╣´©Å [2026-04-14T04:59:25.364Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "d813d4b2-6c98-4fdb-a581-283ead02aa7f",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 57
+}
+Ôä╣´©Å [2026-04-14T04:59:25.376Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 57,
+  "vectorLength": 384,
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T04:59:25.377Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:25.378Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:25.389Z] DEBUG: LLM request validated
+{
+  "requestId": "d813d4b2-6c98-4fdb-a581-283ead02aa7f",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5218
+}
+Ôä╣´©Å [2026-04-14T04:59:40.945Z] INFO: LLM call completed
+{
+  "requestId": "d813d4b2-6c98-4fdb-a581-283ead02aa7f",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5218,
+  "durationMs": 15557,
+  "outputTokens": 54,
+  "totalTokens": 3147
+}
+Ôä╣´©Å [2026-04-14T04:59:40.945Z] INFO: AI: Response generated
+{
+  "requestId": "d813d4b2-6c98-4fdb-a581-283ead02aa7f",
+  "provider": "groq",
+  "responseLength": 277
+}
+--- RESPONSE ---
+The security vulnerability found during testing was an Insecure Direct Object Reference (IDOR) vulnerability in the `GET /api/bids/:id` endpoint. This vulnerability was discovered by Adarsh during security testing and was resolved by adding verification for JWT user ownership.
+
+
+=== QUESTION 8 ===
+What is the current approach for handling webhook events from document signing?
+
+Ôä╣´©Å [2026-04-14T04:59:40.945Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "8e1be69c-3e88-4fb3-94e8-dbff77bcb459",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 79
+}
+Ôä╣´©Å [2026-04-14T04:59:40.960Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 79,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T04:59:40.962Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:40.963Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:40.974Z] DEBUG: LLM request validated
+{
+  "requestId": "8e1be69c-3e88-4fb3-94e8-dbff77bcb459",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5226
+}
+Ôä╣´©Å [2026-04-14T04:59:56.981Z] INFO: LLM call completed
+{
+  "requestId": "8e1be69c-3e88-4fb3-94e8-dbff77bcb459",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5226,
+  "durationMs": 16008,
+  "outputTokens": 87,
+  "totalTokens": 3184
+}
+Ôä╣´©Å [2026-04-14T04:59:56.981Z] INFO: AI: Response generated
+{
+  "requestId": "8e1be69c-3e88-4fb3-94e8-dbff77bcb459",
+  "provider": "groq",
+  "responseLength": 481
+}
+--- RESPONSE ---
+The current approach for handling webhook events from document signing is to use an SQS queue to buffer events from HelloSign, ensuring that a massive burst of document signatures does not overwhelm the database workers. The team has also implemented an idempotency key check on the webhook processor to prevent processing a subscription upgrade multiple times. Additionally, a separate Stripe Webhook Signing Secret is used for the live environment, stored in AWS Secrets Manager.
+
+
+=== QUESTION 9 ===
+Catch me up on the infrastructure decisions made so far.
+
+Ôä╣´©Å [2026-04-14T04:59:56.981Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "c2bce255-ef83-435f-8988-62744626bcdd",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 56
+}
+Ôä╣´©Å [2026-04-14T04:59:56.996Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 56,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T04:59:56.997Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:56.999Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T04:59:57.012Z] DEBUG: LLM request validated
+{
+  "requestId": "c2bce255-ef83-435f-8988-62744626bcdd",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 4156
+}
+Ôä╣´©Å [2026-04-14T05:00:09.333Z] INFO: LLM call completed
+{
+  "requestId": "c2bce255-ef83-435f-8988-62744626bcdd",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 4156,
+  "durationMs": 12322,
+  "outputTokens": 276,
+  "totalTokens": 2703
+}
+Ôä╣´©Å [2026-04-14T05:00:09.333Z] INFO: AI: Response generated
+{
+  "requestId": "c2bce255-ef83-435f-8988-62744626bcdd",
+  "provider": "groq",
+  "responseLength": 1375
+}
+--- RESPONSE ---
+Based on the project context, here's a summary of the infrastructure decisions made so far:
+
+The team has decided to use Amazon ECS (Elastic Container Service) with Fargate for serverless Docker execution, rather than EKS (Kubernetes), due to the current engineering footprint. They have also established a CI/CD pipeline using GitHub Actions, which will build images, push to ECR (Elastic Container Registry), and trigger ECS service updates.
+
+Additionally, the team has emphasized the importance of strict network separation between staging and production environments, which will be achieved through isolated VPCs (Virtual Private Clouds) across different subnets. They have also decided to create a single staging environment that mirrors the production architecture exactly.
+
+The team has used Terraform to provision infrastructure and GitHub Actions to automate deployments. They have also set up a production deployment sequence, including the provisioning of RDS instances, ECS Fargate tasks, and Datadog APM monitors.
+
+In terms of security, the team has identified and addressed a security concern with S3 pre-signed URLs and has updated CloudFront custom error responses and configured Nginx to permit 50MB uploads.
+
+The key technologies used for infrastructure include AWS, ECS with Fargate, GitHub Actions, Terraform, ECR, CloudFront, Nginx, RDS, and Datadog APM.
+
+
+=== QUESTION 10 ===
+What open problems or unresolved questions does the project currently have?
+
+Ôä╣´©Å [2026-04-14T05:00:09.334Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "62f38973-b94c-40a4-b380-03b64fa690ab",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "discussionId": "69ddc95acbca61ea77bfbbc5",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "promptLength": 75
+}
+Ôä╣´©Å [2026-04-14T05:00:09.349Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 75,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T05:00:09.351Z] DEBUG: No message embeddings found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T05:00:09.352Z] DEBUG: No embedded decisions found for project
+{
+  "projectId": "69ddc95acbca61ea77bfbbc2"
+}
+­ƒöì [2026-04-14T05:00:09.363Z] DEBUG: LLM request validated
+{
+  "requestId": "62f38973-b94c-40a4-b380-03b64fa690ab",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "tokenCount": 5226
+}
+Ôä╣´©Å [2026-04-14T05:00:26.029Z] INFO: LLM call completed
+{
+  "requestId": "62f38973-b94c-40a4-b380-03b64fa690ab",
+  "projectId": "69ddc95acbca61ea77bfbbc2",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "inputTokens": 5226,
+  "durationMs": 16666,
+  "outputTokens": 86,
+  "totalTokens": 3182
+}
+Ôä╣´©Å [2026-04-14T05:00:26.029Z] INFO: AI: Response generated
+{
+  "requestId": "62f38973-b94c-40a4-b380-03b64fa690ab",
+  "provider": "groq",
+  "responseLength": 441
+}
+--- RESPONSE ---
+The project currently doesn't have any open problems or unresolved questions. The team has completed the development, testing, and launch of the BuildBoard MVP, and all threads (Backend, Frontend, Infrastructure, and Integrations) have been successfully resolved. The team members have also signed off, indicating that their tasks are complete, and the project is now live. There are no pending issues or questions that need to be addressed.

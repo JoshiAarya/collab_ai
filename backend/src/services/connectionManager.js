@@ -10,8 +10,7 @@ import authService from './authService.js';
 import projectService from './projectService.js';
 import discussionService from './discussionService.js';
 import aiService from './aiService.js';
-import InsightExtractor from '../core/intelligence/InsightExtractor.js';
-import KnowledgeAggregator from '../core/intelligence/KnowledgeAggregator.js';
+
 
 class ConnectionManager {
   constructor() {
@@ -186,6 +185,7 @@ class ConnectionManager {
       // Load and send discussion messages
       const messages = await discussionService.getDiscussionMessages(discussionId, 50);
       const formattedMessages = messages.map(m => ({
+        _id: m._id,
         user: m.user,
         text: m.text,
         time: m.timestamp,
@@ -241,6 +241,7 @@ class ConnectionManager {
       this.broadcastToDiscussion(discussionId, {
         type: 'project-chat',
         message: {
+          _id: message._id,
           user: message.user,
           text: message.text,
           time: message.timestamp,
@@ -254,8 +255,12 @@ class ConnectionManager {
         messageLength: text.length 
       });
 
-      // Async extraction from user message — non-blocking, fail-safe
-      this._triggerExtractionForMessage(message, projectId, discussionId).catch(() => {});
+      // Semantic search indexing — non-blocking. Worker will backfill failures.
+      this._embedMessage(message, projectId, discussionId).catch(err => {
+        logger.warn('Message embedding failed (worker will retry)', {
+          messageId: message._id, error: err.message
+        });
+      });
 
       // Check for AI invocation
       if (text.startsWith('@CollabAI')) {
@@ -279,38 +284,47 @@ class ConnectionManager {
     const prompt = text.replace('@CollabAI', '').trim();
     
     try {
-      // Get project config
       const project = await projectService.getProjectById(projectId);
+      const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
       
-      // Notify discussion that AI is thinking
+      // Notify clients that AI is starting to stream
       this.broadcastToDiscussion(discussionId, {
-        type: 'ai-thinking',
-        status: 'generating'
+        type: 'ai-stream-start'
       });
 
-      // Generate AI response (with userId for rate limiting)
-      const aiReply = await aiService.generateResponse(
-        projectId,
-        discussionId,
-        prompt,
-        project.activeLLM,
-        userId
+      // Stream the response — each chunk is broadcast in real-time
+      const fullResponse = await AIOrchestrator.handleStreamingRequest(
+        {
+          projectId,
+          discussionId,
+          prompt,
+          llmConfig: project.activeLLM,
+          userId
+        },
+        (chunk) => {
+          // Broadcast each chunk to all clients in the discussion
+          this.broadcastToDiscussion(discussionId, {
+            type: 'ai-stream-chunk',
+            chunk
+          });
+        }
       );
 
-      // Save AI message
+      // Save the complete AI message to DB
       const aiMessage = await discussionService.addMessage(
         discussionId,
         projectId,
         null,
         'CollabAI',
-        aiReply,
+        fullResponse,
         true
       );
 
-      // Broadcast AI response
+      // Broadcast the final saved message (with _id for memory button)
       this.broadcastToDiscussion(discussionId, {
-        type: 'project-chat',
+        type: 'ai-stream-end',
         message: {
+          _id: aiMessage._id,
           user: aiMessage.user,
           text: aiMessage.text,
           time: aiMessage.timestamp,
@@ -318,11 +332,11 @@ class ConnectionManager {
         }
       });
 
-      logger.ai('Response generated', { 
+      logger.ai('Streaming response complete', { 
         projectId, 
         discussionId, 
         promptLength: prompt.length,
-        responseLength: aiReply.length
+        responseLength: fullResponse.length
       });
 
     } catch (error) {
@@ -333,13 +347,11 @@ class ConnectionManager {
         statusCode: error.statusCode
       });
       
-      // Handle rate limit errors specially
       let errorText = `⚠️ ${error.message}`;
       if (error.statusCode === 429 && error.retryAfter) {
         errorText = `⚠️ Rate limit exceeded. Please try again in ${error.retryAfter} seconds.`;
       }
       
-      // Send error as a system message so it appears in chat
       const errorMessage = await discussionService.addMessage(
         discussionId,
         projectId,
@@ -349,7 +361,6 @@ class ConnectionManager {
         false
       );
 
-      // Broadcast error as a chat message
       this.broadcastToDiscussion(discussionId, {
         type: 'project-chat',
         message: {
@@ -360,7 +371,6 @@ class ConnectionManager {
         }
       });
 
-      // Also send ai-error event for frontend to stop loading state
       this.broadcastToDiscussion(discussionId, {
         type: 'ai-error',
         message: error.message
@@ -460,70 +470,35 @@ class ConnectionManager {
   }
 
   /**
-   * Async extraction from any message — non-blocking, fail-safe
-   * Only runs on the MAIN discussion. Parallel discussions feed the knowledge
-   * model exclusively via summaries (see summarize route in projects.js).
+   * Embed and save message for semantic search
+   * Non-blocking, fail-safe
    */
-  async _triggerExtractionForMessage(message, projectId, discussionId) {
-    // Task 7: failure isolation — outer catch ensures nothing escapes
+  async _embedMessage(message, projectId, discussionId) {
     try {
-      if (!message.text || message.text.length < 30) return;
+      if (!message.text || message.text.length < 20) return;
       if (message.text.startsWith('@CollabAI')) return;
+      if (message.isAI) return;
 
-      // Only extract from the main discussion thread
-      const { default: DiscussionModel } = await import('../models/Discussion.js');
-      const discussion = await DiscussionModel.findById(discussionId).select('isMain').lean();
-      if (!discussion?.isMain) return;
+      const [{ default: EmbeddingService }, { default: MessageEmbedding }] = await Promise.all([
+        import('../core/embeddings/EmbeddingService.js'),
+        import('../models/MessageEmbedding.js')
+      ]);
 
-      const messageId = message._id;
+      const embedding = await EmbeddingService.embedText(message.text);
+      if (!embedding) return;
 
-      // Task 1: EXTRACTION_STARTED
-      logger.ai('EXTRACTION_STARTED', { projectId, discussionId, messageId, source: message.isAI ? 'ai' : 'user' });
-
-      const project = await projectService.getProjectById(projectId);
-      if (!project) return;
-
-      const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
-      const { default: AIOrchestrator } = await import('../core/orchestrator/AIOrchestrator.js');
-
-      // Task 9: EXTRACTION_TIME_MS
-      const extractStart = Date.now();
-      const extracted = await InsightExtractor.extractFromMessage({
+      await MessageEmbedding.create({
         projectId,
         discussionId,
-        messageId,
-        text: message.text,
-        username: message.user,
-        isAI: message.isAI || false,
-        llmConfig,
-        callProvider: AIOrchestrator.callProvider.bind(AIOrchestrator)
+        messageId: message._id,
+        content: message.text,
+        embedding: embedding,
+        userId: message.user?._id || message.user,
+        username: message.user?.username || 'Unknown',
+        timestamp: message.timestamp || Date.now()
       });
-      const extractionMs = Date.now() - extractStart;
-
-      // Task 1: EXTRACTION_RESULT
-      logger.ai('EXTRACTION_RESULT', {
-        projectId,
-        discussionId,
-        messageId,
-        topics: extracted.topics?.length || 0,
-        decisions: extracted.decisions?.length || 0,
-        blockers: extracted.blockers?.length || 0,
-        actionItems: extracted.actionItems?.length || 0,
-        EXTRACTION_TIME_MS: extractionMs
-      });
-
-      // Task 9: AGGREGATION_TIME_MS
-      const aggStart = Date.now();
-      await KnowledgeAggregator.mergeInsights({
-        projectId,
-        discussionId,
-        extracted: { ...extracted, messageId }
-      });
-      logger.ai('AGGREGATION_TIME_MS', { projectId, messageId, ms: Date.now() - aggStart });
-
     } catch (error) {
-      // Task 7: log but never propagate — message delivery already succeeded
-      logger.warn('EXTRACTION_PIPELINE_FAILED (non-critical)', {
+      logger.warn('Failed to embed message (non-critical)', {
         messageId: message._id,
         projectId,
         error: error.message

@@ -8,55 +8,31 @@ const decisionSchema = new mongoose.Schema({
   },
   text: { type: String, required: true },
   rationale: { type: String, default: '' },
-  topicId: {
+  proposedBy: {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    username: String
+  },
+  sourceMessageId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Topic',
-    default: null
+    ref: 'Message'
   },
   discussionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Discussion',
-    default: null
+    ref: 'Discussion'
   },
-  messageId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Message',
-    default: null
+  embedding: {
+    type: [Number],
+    default: undefined  // sparse — only set when embedded
   },
-  resolvedBlockerIds: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Blocker'
-  }],
-  documentIds: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Document'
-  }],
-  supportingMessageIds: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Message'
-  }],
-  occurrenceCount: { type: Number, default: 1 },
-  status: {
+  embeddingStatus: {
     type: String,
-    enum: ['active', 'superseded', 'reverted'],
-    default: 'active'
+    enum: ['pending', 'done', 'failed'],
+    default: 'pending'
   },
-  supersededBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Decision',
-    default: null
-  },
-  needsHumanValidation: { type: Boolean, default: false },
-  timestamp: { type: Date, default: Date.now },
-  proposedBy: {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    username: { type: String, default: null }
-  }
+  timestamp: { type: Number, default: Date.now }
 }, { timestamps: true });
 
 decisionSchema.index({ projectId: 1, timestamp: -1 });
-decisionSchema.index({ projectId: 1, topicId: 1 });
-decisionSchema.index({ projectId: 1, status: 1 });
-decisionSchema.index({ projectId: 1, status: 1, needsHumanValidation: 1 });
+decisionSchema.index({ projectId: 1, embeddingStatus: 1 });
 
 export default mongoose.model('Decision', decisionSchema);

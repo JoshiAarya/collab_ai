@@ -6,6 +6,7 @@ import config from "./config/index.js";
 import logger from "./utils/logger.js";
 import connectDB from "./config/database.js";
 import connectionManager from "./services/connectionManager.js";
+import embeddingWorker from "./services/EmbeddingWorker.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { sanitize } from "./middleware/validation.js";
 import swaggerUi from 'swagger-ui-express'
@@ -70,7 +71,8 @@ app.get('/health', async (req, res) => {
           status: 'active',
           connections: wsStats.totalConnections,
           authenticated: wsStats.authenticated
-        }
+        },
+        embeddingWorker: embeddingWorker.getStats()
       },
       version: '1.0.0'
     });
@@ -128,6 +130,9 @@ const server = app.listen(config.port, () => {
 // Initialize WebSocket server
 connectionManager.initialize(server);
 
+// Start background embedding worker (retry/backfill)
+embeddingWorker.start();
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
@@ -135,6 +140,7 @@ process.on('SIGTERM', () => {
   server.close(() => {
     logger.info('HTTP server closed');
     connectionManager.shutdown();
+    embeddingWorker.stop();
     process.exit(0);
   });
 });

@@ -1,243 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-import ModelSelector from './ModelSelector';
-import Sidebar from './Sidebar';
-import { getAvatarColor, getInitials } from '../utils/avatarColors';
-import apiRequest, { getWsUrl } from '../utils/api.js';
-import Dashboard from './Dashboard';
-
-export default function ProjectWorkspace({ project, onBack }) {
-  const { user, token } = useAuth();
-  const { colors } = useTheme();
-  const [discussions, setDiscussions] = useState([]);
-  const [currentDiscussion, setCurrentDiscussion] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [ws, setWs] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showMentions, setShowMentions] = useState(false);
-  const [mentionSearch, setMentionSearch] = useState('');
-  const [showMenu, setShowMenu] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
-  const [showDocuments, setShowDocuments] = useState(false);
-  const [showSummaries, setShowSummaries] = useState(false);
-  const [showAllSummaries, setShowAllSummaries] = useState(false);
-  const [showCreateDiscussion, setShowCreateDiscussion] = useState(false);
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [showInviteToDiscussion, setShowInviteToDiscussion] = useState(false);
-  const [inviteDiscussionId, setInviteDiscussionId] = useState(null);
-  const [currentModel, setCurrentModel] = useState(project.activeLLM || { provider: 'groq', model: 'llama-3.1-8b-instant' });
-  
-  // State awareness
-  const [isLoadingDiscussions, setIsLoadingDiscussions] = useState(true);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [wsStatus, setWsStatus] = useState('connecting'); // connecting, connected, disconnected, reconnecting
-  const [aiThinking, setAiThinking] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const streamingTextRef = useRef('');
-  
-  const endRef = useRef(null);
-  const textareaRef = useRef(null);
-  const mentionRef = useRef(null);
-
-  const isOwner = project.ownerId._id === user._id;
-
-  useEffect(() => {
-    loadDiscussions();
-  }, [project]);
-
-  // Check for pending discussion ID from invite link
-  useEffect(() => {
-    const pendingDiscussionId = sessionStorage.getItem('pendingDiscussionId');
-    if (pendingDiscussionId && discussions.length > 0) {
-      const discussion = discussions.find(d => d._id === pendingDiscussionId);
-      if (discussion) {
-        setCurrentDiscussion(discussion);
-        sessionStorage.removeItem('pendingDiscussionId');
-      }
-    }
-  }, [discussions]);
-
-  useEffect(() => {
-    connectWebSocket();
-    return () => {
-      if (ws) ws.close();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (currentDiscussion && ws && ws.readyState === WebSocket.OPEN) {
-      console.log('Joining discussion:', currentDiscussion._id);
-      ws.send(JSON.stringify({
-        type: 'join-project',
-        projectId: project._id,
-        discussionId: currentDiscussion._id
-      }));
-    }
-  }, [currentDiscussion, ws, ws?.readyState]);
-
-  // Auto-scroll during streaming — only if user is near bottom, use instant to prevent jitter
-  const messagesContainerRef = useRef(null);
-  useEffect(() => {
-    if (!isStreaming && !aiThinking) return;
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    // Only auto-scroll if user is within 150px of bottom (not scrolled up reading history)
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-    if (isNearBottom) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [streamingText, isStreaming, aiThinking]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Scroll to bottom when returning to chat view
-  useEffect(() => {
-    if (!showDashboard && !showDocuments && !showSettings && !showSummaries && messages.length > 0) {
-      setTimeout(() => {
-        endRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-  }, [showDashboard, showDocuments, showSettings, showSummaries]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
-    }
-  }, [input]);
-
-  // Check for @ mentions
-  useEffect(() => {
-    const lastAtIndex = input.lastIndexOf('@');
-    if (lastAtIndex !== -1 && lastAtIndex === input.length - 1) {
-      setShowMentions(true);
-      setMentionSearch('');
-    } else if (lastAtIndex !== -1) {
-      const afterAt = input.slice(lastAtIndex + 1);
-      if (!afterAt.includes(' ')) {
-        setShowMentions(true);
-        setMentionSearch(afterAt.toLowerCase());
-      } else {
-        setShowMentions(false);
-      }
-    } else {
-      setShowMentions(false);
-    }
-  }, [input]);
-
-  const loadDiscussions = async () => {
-    setIsLoadingDiscussions(true);
-    try {
-      const response = await apiRequest(
-        `/api/projects/${project._id}/discussions`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      const data = await response.json();
-      if (data.success) {
-        const userDiscussions = data.discussions.filter(d => {
-          if (isOwner) return true;
-          if (d.isMain) return true;
-          return d.participants?.some(p => p._id === user._id);
-        });
-        
-        setDiscussions(userDiscussions);
-        const main = userDiscussions.find(d => d.isMain);
-        if (main && !currentDiscussion) {
-          setCurrentDiscussion(main);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading discussions:', error);
-    } finally {
-      setIsLoadingDiscussions(false);
-    }
-  };
-
-  const connectWebSocket = () => {
-    setWsStatus('connecting');
-    const wsUrl = getWsUrl();
-    console.log('Connecting to WebSocket:', wsUrl);
-    const socket = new WebSocket(wsUrl);
-    
-    socket.onopen = () => {
-      console.log('WebSocket connected');
-      setWsStatus('connected');
-      socket.send(JSON.stringify({ type: 'auth', token }));
-      
-      // If we already have a current discussion, join it
-      if (currentDiscussion) {
-        console.log('Auto-joining discussion on connect:', currentDiscussion._id);
-        socket.send(JSON.stringify({
-          type: 'join-project',
-          projectId: project._id,
-          discussionId: currentDiscussion._id
-        }));
-      }
-    };
-
-    socket.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      
-      if (data.type === 'discussion-joined') {
-        setMessages(data.messages);
-        setIsLoadingMessages(false);
-      } else if (data.type === 'project-chat') {
-        setMessages(prev => prev.some(m => m._id && m._id === data.message._id) ? prev : [...prev, data.message]);
-        setIsSendingMessage(false);
-        if (data.message.isAI) {
-          setAiThinking(false);
-        }
-      } else if (data.type === 'ai-stream-start') {
-        setAiThinking(false);
-        setIsStreaming(true);
-        setStreamingText('');
-        streamingTextRef.current = '';
-        setIsSendingMessage(false);
-      } else if (data.type === 'ai-stream-chunk') {
-        streamingTextRef.current += data.chunk;
-        setStreamingText(streamingTextRef.current);
-      } else if (data.type === 'ai-stream-end') {
-        setIsStreaming(false);
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (data.message) {
-          setMessages(prev => [...prev, data.message]);
-        }
-      } else if (data.type === 'ai-error') {
-        setAiThinking(false);
-        setIsStreaming(false);
-        setStreamingText('');
-        streamingTextRef.current = '';
-        setIsSendingMessage(false);
-      } else if (data.type === 'error') {
-        setIsSendingMessage(false);
-        setAiThinking(false);
-        setIsStreaming(false);
-      }
-    };
-
-    socket.onclose = (event) => {
-      console.log('WebSocket closed:', event.code, event.reason);
-      setWsStatus('disconnected');
-      // Auto-reconnect after 3 seconds
-      setTimeout(() => {
-        if (wsStatus !== 'connected') {
-          setWsStatus('reconnecting');
-          connectWebSocket();
-        }
-      }, 3000);
-    };
-
-    socket.onerror = (error) => {
+socket.onerror = (error) => {
       console.error('WebSocket error:', error);
       setWsStatus('disconnected');
     };
@@ -558,17 +319,10 @@ export default function ProjectWorkspace({ project, onBack }) {
       </Sidebar>
 
       {/* Main */}
-      <div className="main-workspace" style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
+      <div style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
         {/* Header */}
         <div style={{...styles.header, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
           <div style={styles.headerTitle}>
-
-
-
-
-
-
-
             <ModelSelector 
               currentModel={currentModel}
               onModelChange={setCurrentModel}
@@ -662,7 +416,7 @@ export default function ProjectWorkspace({ project, onBack }) {
           </div>
         </div>
 
-        <div ref={messagesContainerRef} className="messages-container chat-messages" style={{...styles.messages, background: colors.background}}>
+        <div ref={messagesContainerRef} className="chat-messages" style={{...styles.messages, background: colors.background}}>
           {isLoadingMessages ? (
             <div style={styles.loadingState}>
               <div style={styles.loadingSpinner}></div>
@@ -3973,3 +3727,2199 @@ const styles = {
     fontWeight: '600'
   }
 };
+
+
+=== frontend\src\components\shared\ErrorBoundary.jsx ===
+
+/**
+ * Error Boundary Component
+ * Catches React errors and displays fallback UI
+ */
+
+import React from 'react';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
+    };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({
+      error,
+      errorInfo
+    });
+
+    // Log error to console in development
+    if (import.meta.env.MODE === 'development') {
+      console.error('Error Boundary caught:', error, errorInfo);
+    }
+
+    // In production, you would send this to an error reporting service
+    // Example: Sentry.captureException(error, { extra: errorInfo });
+  }
+
+  handleReset = () => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null
+    });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={styles.container}>
+          <div style={styles.content}>
+            <div style={styles.icon}>⚠️</div>
+            <h2 style={styles.title}>Something went wrong</h2>
+            <p style={styles.message}>
+              We're sorry for the inconvenience. The application encountered an unexpected error.
+            </p>
+            
+            {import.meta.env.MODE === 'development' && this.state.error && (
+              <details style={styles.details}>
+                <summary style={styles.summary}>Error Details (Development Only)</summary>
+                <pre style={styles.errorText}>
+                  {this.state.error.toString()}
+                  {this.state.errorInfo?.componentStack}
+                </pre>
+              </details>
+            )}
+
+            <div style={styles.actions}>
+              <button onClick={this.handleReset} style={styles.button}>
+                Try Again
+              </button>
+              <button 
+                onClick={() => window.location.href = '/'} 
+                style={{...styles.button, ...styles.secondaryButton}}
+              >
+                Go Home
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const styles = {
+  container: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: '#0d1117',
+    padding: '20px'
+  },
+  content: {
+    maxWidth: '600px',
+    width: '100%',
+    background: '#161b22',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '12px',
+    padding: '40px',
+    textAlign: 'center'
+  },
+  icon: {
+    fontSize: '64px',
+    marginBottom: '20px'
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#ececf1',
+    marginBottom: '12px'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#8e8ea0',
+    marginBottom: '24px',
+    lineHeight: '1.5'
+  },
+  details: {
+    marginTop: '24px',
+    marginBottom: '24px',
+    textAlign: 'left',
+    background: '#0d1117',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    padding: '16px'
+  },
+  summary: {
+    cursor: 'pointer',
+    color: '#ececf1',
+    fontWeight: '500',
+    marginBottom: '12px'
+  },
+  errorText: {
+    fontSize: '12px',
+    color: '#ff6b6b',
+    overflow: 'auto',
+    maxHeight: '200px',
+    fontFamily: 'monospace'
+  },
+  actions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center'
+  },
+  button: {
+    padding: '12px 24px',
+    background: '#10a37f',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+    fontFamily: 'inherit'
+  },
+  secondaryButton: {
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.2)',
+    color: '#ececf1'
+  }
+};
+
+export default ErrorBoundary;
+
+
+=== frontend\src\components\shared\SuccessModal.jsx ===
+
+import React from 'react';
+
+export default function SuccessModal({ title, message, onClose, actionText = 'Continue' }) {
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.iconContainer}>
+          <div style={styles.successIcon}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+        </div>
+
+        <h2 style={styles.title}>{title}</h2>
+        <p style={styles.message}>{message}</p>
+
+        <button onClick={onClose} style={styles.button}>
+          {actionText}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    animation: 'fadeIn 0.2s ease-out'
+  },
+  modal: {
+    background: '#1a1a1a',
+    borderRadius: '16px',
+    padding: '40px',
+    maxWidth: '400px',
+    width: '90%',
+    textAlign: 'center',
+    border: '1px solid #2d2d2d',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    animation: 'slideUp 0.3s ease-out'
+  },
+  iconContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '24px'
+  },
+  successIcon: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    background: 'rgba(16, 163, 127, 0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#10a37f',
+    animation: 'scaleIn 0.4s ease-out'
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#ececec',
+    marginBottom: '12px'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#b4b4b4',
+    lineHeight: '1.6',
+    marginBottom: '32px'
+  },
+  button: {
+    width: '100%',
+    padding: '14px',
+    background: '#10a37f',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontFamily: 'inherit'
+  }
+};
+
+
+=== frontend\src\components\shared\Toast.jsx ===
+
+/**
+ * Toast Notification Component
+ * Displays temporary notification messages
+ */
+
+import React, { useState, useEffect } from 'react';
+
+export function Toast({ message, type = 'info', duration = 5000, onClose }) {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleClose();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsVisible(false);
+      onClose?.();
+    }, 300);
+  };
+
+  if (!isVisible) return null;
+
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+
+  const colors = {
+    success: '#10a37f',
+    error: '#ff6b6b',
+    warning: '#ffa500',
+    info: '#4a9eff'
+  };
+
+  return (
+    <div 
+      style={{
+        ...styles.toast,
+        borderLeft: `4px solid ${colors[type]}`,
+        animation: isExiting ? 'slideOut 0.3s ease-out' : 'slideIn 0.3s ease-out'
+      }}
+    >
+      <div style={{...styles.icon, color: colors[type]}}>
+        {icons[type]}
+      </div>
+      <div style={styles.message}>{message}</div>
+      <button onClick={handleClose} style={styles.closeButton}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+export function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div style={styles.container}>
+      {toasts.map((toast) => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    zIndex: 10000,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    maxWidth: '400px'
+  },
+  toast: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    background: '#1e1e1e',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    padding: '16px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    minWidth: '300px'
+  },
+  icon: {
+    fontSize: '20px',
+    fontWeight: 'bold',
+    flexShrink: 0
+  },
+  message: {
+    flex: 1,
+    color: '#ececf1',
+    fontSize: '14px',
+    lineHeight: '1.4'
+  },
+  closeButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#8e8ea0',
+    fontSize: '16px',
+    cursor: 'pointer',
+    padding: '4px',
+    flexShrink: 0,
+    transition: 'color 0.2s'
+  }
+};
+
+// Add keyframe animations
+const styleSheet = document.createElement('style');
+styleSheet.textContent = `
+  @keyframes slideIn {
+    from {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideOut {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+  }
+`;
+document.head.appendChild(styleSheet);
+
+export default Toast;
+
+
+=== frontend\src\components\Sidebar.jsx ===
+
+import React from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { getAvatarColor, getInitials } from '../utils/avatarColors';
+import ProfileModal from './ProfileModal';
+
+export default function Sidebar({ children, footerContent, iconBarContent, onToggle, isOpen = true }) {
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme, colors } = useTheme();
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [showUserDropdown, setShowUserDropdown] = React.useState(false);
+  const [showProfileModal, setShowProfileModal] = React.useState(false);
+
+  const styles = getStyles(colors);
+
+  return (
+    <>
+      {/* Icon Bar - Always visible */}
+      <div style={styles.iconBar}>
+        <button 
+          onClick={onToggle} 
+          style={styles.iconBarBtn}
+          title={isOpen ? "Close sidebar" : "Open sidebar"}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {isHovered ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M9 3v18"/>
+            </svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+          )}
+        </button>
+
+        {!isOpen && iconBarContent}
+      </div>
+
+      {/* Sidebar */}
+      {isOpen && (
+        <div style={styles.sidebar}>
+          <div style={styles.sidebarContent}>
+            {children}
+          </div>
+
+          <div style={styles.sidebarFooter}>
+            {footerContent}
+            
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                style={styles.userSection}
+                onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{
+                  ...styles.userAvatar,
+                  background: getAvatarColor(user?.username)
+                }}>
+                  {getInitials(user?.username)}
+                </div>
+                <div style={styles.userInfo}>
+                  <div style={styles.userName}>{user?.username}</div>
+                  <div style={styles.userEmail}>{user?.email}</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                  <path d="M18 15l-6-6-6 6"/>
+                </svg>
+              </button>
+
+              {showUserDropdown && (
+                <>
+                  <div 
+                    style={styles.dropdownBackdrop} 
+                    onClick={() => setShowUserDropdown(false)}
+                  />
+                  <div style={getStyles(colors).userDropdown}>
+                    <button 
+                      style={getStyles(colors).dropdownItem}
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        setShowProfileModal(true);
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      <span>Profile</span>
+                    </button>
+                    
+                    <button 
+                      style={getStyles(colors).dropdownItem}
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        toggleTheme();
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      {theme === 'dark' ? (
+                        <>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                          </svg>
+                          <span>Switch to Light Mode</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                          </svg>
+                          <span>Switch to Dark Mode</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div style={getStyles(colors).dropdownDivider} />
+                    
+                    <button 
+                      style={getStyles(colors).dropdownItem}
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        logout();
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                      </svg>
+                      <span>Log out</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showProfileModal && (
+        <ProfileModal onClose={() => setShowProfileModal(false)} />
+      )}
+    </>
+  );
+}
+
+const getStyles = (colors) => ({
+  iconBar: {
+    position: 'fixed',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '48px',
+    background: colors.iconBar,
+    borderRight: `1px solid ${colors.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '8px 0',
+    gap: '8px',
+    zIndex: 1000
+  },
+  iconBarBtn: {
+    width: '40px',
+    height: '40px',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: '8px',
+    color: colors.textTertiary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s'
+  },
+  sidebar: {
+    position: 'fixed',
+    left: '48px',
+    top: 0,
+    bottom: 0,
+    width: '280px',
+    background: colors.surface,
+    borderRight: `1px solid ${colors.border}`,
+    display: 'flex',
+    flexDirection: 'column',
+    zIndex: 999
+  },
+  sidebarContent: {
+    flex: 1,
+    overflowY: 'auto'
+  },
+  sidebarFooter: {
+    padding: '16px',
+    borderTop: `1px solid ${colors.border}`
+  },
+  userSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+    background: 'transparent',
+    border: 'none',
+    width: '100%',
+    fontFamily: 'inherit'
+  },
+  userAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: '600',
+    flexShrink: 0
+  },
+  userInfo: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: 'left'
+  },
+  userName: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  userEmail: {
+    fontSize: '12px',
+    color: colors.textTertiary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  dropdownBackdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1999
+  },
+  userDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: '8px',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '10px',
+    padding: '6px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+    zIndex: 2000,
+    animation: 'slideUp 0.2s ease-out'
+  },
+  dropdownItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    padding: '12px',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    color: colors.text,
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+    fontFamily: 'inherit',
+    textAlign: 'left'
+  },
+  dropdownDivider: {
+    height: '1px',
+    background: colors.border,
+    margin: '6px 0'
+  }
+});
+
+
+=== frontend\src\config\index.js ===
+
+/**
+ * Frontend Configuration
+ * Centralized configuration for API endpoints and app settings
+ */
+
+const env = import.meta.env.MODE || 'development';
+
+const config = {
+  // Environment
+  isDevelopment: env === 'development',
+  isProduction: env === 'production',
+
+  // API Configuration - uses VITE_API_BASE_URL from .env files
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080',
+
+  // API Endpoints
+  api: {
+    auth: {
+      register: '/api/auth/register',
+      login: '/api/auth/login',
+      verify: '/api/auth/verify',
+      google: '/api/auth/google'
+    },
+    projects: {
+      list: '/api/projects',
+      create: '/api/projects',
+      get: (id) => `/api/projects/${id}`,
+      update: (id) => `/api/projects/${id}`,
+      join: '/api/projects/join',
+      discussions: (id) => `/api/projects/${id}/discussions`,
+      documents: (id) => `/api/projects/${id}/documents`,
+      summary: (id) => `/api/projects/${id}/summary`
+    },
+    discussions: {
+      create: (projectId) => `/api/projects/${projectId}/discussions`,
+      get: (projectId, discussionId) => `/api/projects/${projectId}/discussions/${discussionId}`,
+      messages: (projectId, discussionId) => `/api/projects/${projectId}/discussions/${discussionId}/messages`
+    },
+    documents: {
+      upload: (projectId) => `/api/projects/${projectId}/documents`,
+      delete: (projectId, docId) => `/api/projects/${projectId}/documents/${docId}`
+    }
+  },
+
+  // WebSocket Configuration
+  ws: {
+    reconnectInterval: 3000,
+    reconnectMaxAttempts: 10,
+    heartbeatInterval: 30000,
+    messageQueueSize: 100
+  },
+
+  // UI Configuration
+  ui: {
+    toastDuration: 5000,
+    messageLoadLimit: 50,
+    documentMaxSize: 10 * 1024 * 1024, // 10MB
+    autoScrollThreshold: 100
+  },
+
+  // Feature Flags
+  features: {
+    offlineMode: true,
+    optimisticUpdates: true,
+    aiStreaming: false, // Coming soon
+    voiceInput: false // Coming soon
+  }
+};
+
+export default config;
+
+
+=== frontend\src\contexts\AuthContext.jsx ===
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import apiService from '../services/api.js';
+import config from '../config/index.js';
+
+const AuthContext = createContext(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
+
+  useEffect(() => {
+    // Check for stored token
+    const storedToken = localStorage.getItem('collab-ai-token');
+    if (storedToken) {
+      apiService.setToken(storedToken);
+      verifyToken(storedToken);
+    } else {
+      setLoading(false);
+      setInitialCheckDone(true);
+    }
+  }, []);
+
+  const verifyToken = async (tokenToVerify) => {
+    try {
+      const data = await apiService.get(config.api.auth.verify);
+
+      if (data.success) {
+        setUser(data.user);
+        setToken(tokenToVerify);
+      } else {
+        localStorage.removeItem('collab-ai-token');
+        apiService.clearToken();
+      }
+    } catch (error) {
+      console.error('Token verification failed:', error);
+      localStorage.removeItem('collab-ai-token');
+      apiService.clearToken();
+    } finally {
+      setLoading(false);
+      setInitialCheckDone(true);
+    }
+  };
+
+  const login = async (email, password) => {
+    const data = await apiService.post(config.api.auth.login, { email, password });
+    
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Login failed');
+    }
+
+    setUser(data.user);
+    setToken(data.token);
+    apiService.setToken(data.token);
+    localStorage.setItem('collab-ai-token', data.token);
+    
+    return data;
+  };
+
+  const register = async (username, email, password) => {
+    const data = await apiService.post(config.api.auth.register, { 
+      username, 
+      email, 
+      password 
+    });
+    
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Registration failed');
+    }
+
+    setUser(data.user);
+    setToken(data.token);
+    apiService.setToken(data.token);
+    localStorage.setItem('collab-ai-token', data.token);
+    
+    return data;
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    apiService.clearToken();
+    localStorage.removeItem('collab-ai-token');
+  };
+
+  // Expose method to manually trigger token verification (for OAuth)
+  const refreshAuth = async () => {
+    const storedToken = localStorage.getItem('collab-ai-token');
+    if (storedToken) {
+      setLoading(true);
+      apiService.setToken(storedToken);
+      await verifyToken(storedToken);
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshAuth }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+
+=== frontend\src\contexts\ThemeContext.jsx ===
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import apiRequest from '../utils/api.js';
+
+const ThemeContext = createContext(null);
+
+export const themes = {
+  dark: {
+    name: 'dark',
+    colors: {
+      background: '#0d0d0d',
+      surface: '#1a1a1a',
+      surfaceHover: '#2d2d2d',
+      border: '#2d2d2d',
+      text: '#ececec',
+      textSecondary: '#b4b4b4',
+      textTertiary: '#6b6b6b',
+      primary: '#8b5cf6',
+      success: '#10a37f',
+      error: '#ff6b6b',
+      warning: '#ffa500',
+      iconBar: '#111111'
+    }
+  },
+  light: {
+    name: 'light',
+    colors: {
+      background: '#ffffff',
+      surface: '#f7f7f8',
+      surfaceHover: '#ececed',
+      border: '#e5e5e5',
+      text: '#0d0d0d',
+      textSecondary: '#565869',
+      textTertiary: '#8e8ea0',
+      primary: '#8b5cf6',
+      success: '#10a37f',
+      error: '#ef4444',
+      warning: '#f59e0b',
+      iconBar: '#f7f7f8'
+    }
+  }
+};
+
+export function ThemeProvider({ children }) {
+  const { user, token } = useAuth();
+  const [theme, setTheme] = useState(user?.theme || 'dark');
+
+  useEffect(() => {
+    if (user?.theme) {
+      setTheme(user.theme);
+    }
+  }, [user]);
+
+  const toggleTheme = async () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+
+    // Update on backend
+    if (token) {
+      try {
+        await apiRequest('/api/user/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ theme: newTheme })
+        });
+      } catch (error) {
+        console.error('Failed to update theme:', error);
+      }
+    }
+  };
+
+  const currentTheme = themes[theme];
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme, colors: currentTheme.colors }}>
+      <div style={{
+        background: currentTheme.colors.background,
+        color: currentTheme.colors.text,
+        minHeight: '100vh',
+        '--surface-color': currentTheme.colors.surface,
+        '--border-color': currentTheme.colors.border,
+        '--text-secondary': currentTheme.colors.textSecondary
+      }}>
+        {children}
+      </div>
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within ThemeProvider');
+  }
+  return context;
+}
+
+
+=== frontend\src\contexts\ToastContext.jsx ===
+
+import React, { createContext, useContext, useState, useCallback } from 'react';
+
+const ToastContext = createContext(null);
+
+let toastId = 0;
+
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = useCallback((message, type = 'info', duration = 5000) => {
+    const id = ++toastId;
+    
+    setToasts(prev => [...prev, {
+      id,
+      message,
+      type,
+      duration
+    }]);
+
+    return id;
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
+
+  const success = useCallback((message, duration) => {
+    return showToast(message, 'success', duration);
+  }, [showToast]);
+
+  const error = useCallback((message, duration) => {
+    return showToast(message, 'error', duration);
+  }, [showToast]);
+
+  const warning = useCallback((message, duration) => {
+    return showToast(message, 'warning', duration);
+  }, [showToast]);
+
+  const info = useCallback((message, duration) => {
+    return showToast(message, 'info', duration);
+  }, [showToast]);
+
+  return (
+    <ToastContext.Provider value={{ success, error, warning, info }}>
+      {children}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider');
+  }
+  return context;
+}
+
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div style={styles.container}>
+      {toasts.map((toast) => (
+        <ToastItem
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ToastItem({ message, type = 'info', duration = 5000, onClose }) {
+  const [isExiting, setIsExiting] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      handleClose();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onClose?.();
+    }, 300);
+  };
+
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+
+  const colors = {
+    success: '#10a37f',
+    error: '#ff6b6b',
+    warning: '#ffa500',
+    info: '#4a9eff'
+  };
+
+  return (
+    <div 
+      style={{
+        ...styles.toast,
+        borderLeft: `4px solid ${colors[type]}`,
+        animation: isExiting ? 'slideOut 0.3s ease-out' : 'slideIn 0.3s ease-out'
+      }}
+    >
+      <div style={{...styles.icon, color: colors[type]}}>
+        {icons[type]}
+      </div>
+      <div style={styles.message}>{message}</div>
+      <button onClick={handleClose} style={styles.closeButton}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    zIndex: 10000,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    maxWidth: '400px',
+    pointerEvents: 'none'
+  },
+  toast: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    background: '#1e1e1e',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    padding: '16px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    minWidth: '300px',
+    pointerEvents: 'auto'
+  },
+  icon: {
+    fontSize: '20px',
+    fontWeight: 'bold',
+    flexShrink: 0
+  },
+  message: {
+    flex: 1,
+    color: '#ececf1',
+    fontSize: '14px',
+    lineHeight: '1.4'
+  },
+  closeButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#8e8ea0',
+    fontSize: '16px',
+    cursor: 'pointer',
+    padding: '4px',
+    flexShrink: 0,
+    transition: 'color 0.2s'
+  }
+};
+
+
+=== frontend\src\hooks\useToast.js ===
+
+/**
+ * Toast Hook
+ * Provides toast notification functionality
+ */
+
+import { useState, useCallback } from 'react';
+
+let toastId = 0;
+
+export function useToast() {
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = useCallback((message, type = 'info', duration = 5000) => {
+    const id = ++toastId;
+    
+    setToasts(prev => [...prev, {
+      id,
+      message,
+      type,
+      duration
+    }]);
+
+    return id;
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
+
+  const success = useCallback((message, duration) => {
+    return showToast(message, 'success', duration);
+  }, [showToast]);
+
+  const error = useCallback((message, duration) => {
+    return showToast(message, 'error', duration);
+  }, [showToast]);
+
+  const warning = useCallback((message, duration) => {
+    return showToast(message, 'warning', duration);
+  }, [showToast]);
+
+  const info = useCallback((message, duration) => {
+    return showToast(message, 'info', duration);
+  }, [showToast]);
+
+  return {
+    toasts,
+    showToast,
+    removeToast,
+    success,
+    error,
+    warning,
+    info
+  };
+}
+
+
+=== frontend\src\main.jsx ===
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.jsx'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+=== frontend\src\services\api.js ===
+
+/**
+ * API Service
+ * Centralized HTTP client with interceptors and error handling
+ */
+
+import config from '../config/index.js';
+
+class APIService {
+  constructor() {
+    this.baseURL = config.apiBaseUrl;
+    this.token = null;
+  }
+
+  /**
+   * Set authentication token
+   */
+  setToken(token) {
+    this.token = token;
+  }
+
+  /**
+   * Clear authentication token
+   */
+  clearToken() {
+    this.token = null;
+  }
+
+  /**
+   * Get headers for request
+   */
+  getHeaders(customHeaders = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...customHeaders
+    };
+
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    return headers;
+  }
+
+  /**
+   * Handle API response
+   */
+  async handleResponse(response) {
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Handle error response
+      const error = new Error(data.error?.message || 'Request failed');
+      error.code = data.error?.code;
+      error.details = data.error?.details;
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Handle API error
+   */
+  handleError(error) {
+    // Network error
+    if (!error.statusCode) {
+      const networkError = new Error('Network error. Please check your connection.');
+      networkError.code = 'NETWORK_ERROR';
+      throw networkError;
+    }
+
+    // Re-throw API errors
+    throw error;
+  }
+
+  /**
+   * GET request
+   */
+  async get(endpoint, options = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'GET',
+        headers: this.getHeaders(options.headers),
+        ...options
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * POST request
+   */
+  async post(endpoint, body, options = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'POST',
+        headers: this.getHeaders(options.headers),
+        body: JSON.stringify(body),
+        ...options
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * PUT request
+   */
+  async put(endpoint, body, options = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'PUT',
+        headers: this.getHeaders(options.headers),
+        body: JSON.stringify(body),
+        ...options
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * PATCH request
+   */
+  async patch(endpoint, body, options = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'PATCH',
+        headers: this.getHeaders(options.headers),
+        body: JSON.stringify(body),
+        ...options
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * DELETE request
+   */
+  async delete(endpoint, options = {}) {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(options.headers),
+        ...options
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * Upload file
+   */
+  async upload(endpoint, file, additionalData = {}) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      Object.keys(additionalData).forEach(key => {
+        formData.append(key, additionalData[key]);
+      });
+
+      const headers = {};
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
+
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      return await this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+}
+
+// Create singleton instance
+const apiService = new APIService();
+
+export default apiService;
+
+
+=== frontend\src\services\projectService.js ===
+
+/**
+ * Project Service
+ * Handles all project-related API operations
+ */
+
+import apiService from './api.js';
+import config from '../config/index.js';
+
+class ProjectService {
+  /**
+   * Get user's projects
+   */
+  async getProjects() {
+    return await apiService.get(config.api.projects.list);
+  }
+
+  /**
+   * Create new project
+   */
+  async createProject(title, problemStatement) {
+    return await apiService.post(config.api.projects.create, {
+      title,
+      problemStatement
+    });
+  }
+
+  /**
+   * Get project by ID
+   */
+  async getProject(projectId) {
+    return await apiService.get(config.api.projects.get(projectId));
+  }
+
+  /**
+   * Update project
+   */
+  async updateProject(projectId, updates) {
+    return await apiService.put(config.api.projects.update(projectId), updates);
+  }
+
+  /**
+   * Join project with invite code
+   */
+  async joinProject(inviteCode) {
+    return await apiService.post(config.api.projects.join, { inviteCode });
+  }
+
+  /**
+   * Update project stage
+   */
+  async updateStage(projectId, stage) {
+    return await apiService.patch(config.api.projects.update(projectId), { stage });
+  }
+
+  /**
+   * Update active LLM
+   */
+  async updateLLM(projectId, llmConfig) {
+    return await apiService.patch(config.api.projects.update(projectId), {
+      activeLLM: llmConfig
+    });
+  }
+
+  /**
+   * Get project discussions
+   */
+  async getDiscussions(projectId) {
+    return await apiService.get(config.api.projects.discussions(projectId));
+  }
+
+  /**
+   * Create discussion
+   */
+  async createDiscussion(projectId, title, description, parentDiscussionId = null) {
+    return await apiService.post(config.api.discussions.create(projectId), {
+      title,
+      description,
+      parentDiscussionId
+    });
+  }
+
+  /**
+   * Get discussion messages
+   */
+  async getMessages(projectId, discussionId, limit = 50) {
+    return await apiService.get(
+      `${config.api.discussions.messages(projectId, discussionId)}?limit=${limit}`
+    );
+  }
+
+  /**
+   * Get project documents
+   */
+  async getDocuments(projectId) {
+    return await apiService.get(config.api.projects.documents(projectId));
+  }
+
+  /**
+   * Upload document
+   */
+  async uploadDocument(projectId, title, content, fileType = 'text') {
+    return await apiService.post(config.api.documents.upload(projectId), {
+      title,
+      content,
+      fileType
+    });
+  }
+
+  /**
+   * Delete document
+   */
+  async deleteDocument(projectId, documentId) {
+    return await apiService.delete(config.api.documents.delete(projectId, documentId));
+  }
+
+  /**
+   * Generate summary
+   */
+  async generateSummary(projectId, discussionId) {
+    return await apiService.post(config.api.projects.summary(projectId), {
+      discussionId
+    });
+  }
+
+}
+
+export default new ProjectService();
+
+
+=== frontend\src\services\websocket.js ===
+
+/**
+ * WebSocket Service
+ * Manages WebSocket connection lifecycle, reconnection, and message handling
+ */
+
+import config from '../config/index.js';
+
+class WebSocketService {
+  constructor() {
+    this.ws = null;
+    this.url = config.wsBaseUrl;
+    this.token = null;
+    this.reconnectAttempts = 0;
+    this.reconnectTimer = null;
+    this.heartbeatTimer = null;
+    this.messageQueue = [];
+    this.listeners = new Map();
+    this.status = 'disconnected'; // disconnected, connecting, connected, reconnecting
+    this.isIntentionalClose = false;
+  }
+
+  /**
+   * Connect to WebSocket server
+   */
+  connect(token) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    this.token = token;
+    this.isIntentionalClose = false;
+    this.status = 'connecting';
+    this.emit('status', 'connecting');
+
+    try {
+      this.ws = new WebSocket(this.url);
+      this.setupEventHandlers();
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
+      this.handleReconnect();
+    }
+  }
+
+  /**
+   * Setup WebSocket event handlers
+   */
+  setupEventHandlers() {
+    this.ws.onopen = () => {
+      this.status = 'connected';
+      this.reconnectAttempts = 0;
+      this.emit('status', 'connected');
+
+      // Authenticate
+      if (this.token) {
+        this.send({ type: 'auth', token: this.token });
+      }
+
+      // Send queued messages
+      this.flushMessageQueue();
+
+      // Start heartbeat
+      this.startHeartbeat();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.handleMessage(data);
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    this.ws.onclose = () => {
+      this.status = 'disconnected';
+      this.emit('status', 'disconnected');
+      this.stopHeartbeat();
+
+      if (!this.isIntentionalClose) {
+        this.handleReconnect();
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      this.emit('error', error);
+    };
+  }
+
+  /**
+   * Handle incoming message
+   */
+  handleMessage(data) {
+    // Emit to specific event listeners
+    if (data.type) {
+      this.emit(data.type, data);
+    }
+
+    // Emit to general message listeners
+    this.emit('message', data);
+  }
+
+  /**
+   * Send message
+   */
+  send(data) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+    } else {
+      // Queue message if not connected
+      if (this.messageQueue.length < config.ws.messageQueueSize) {
+        this.messageQueue.push(data);
+      }
+    }
+  }
+
+  /**
+   * Flush queued messages
+   */
+  flushMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      this.send(message);
+    }
+  }
+
+  /**
+   * Handle reconnection with exponential backoff
+   */
+  handleReconnect() {
+    if (this.reconnectAttempts >= config.ws.reconnectMaxAttempts) {
+      this.emit('max-reconnect-attempts');
+      return;
+    }
+
+    this.status = 'reconnecting';
+    this.emit('status', 'reconnecting');
+
+    const delay = Math.min(
+      config.ws.reconnectInterval * Math.pow(2, this.reconnectAttempts),
+      30000 // Max 30 seconds
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectAttempts++;
+      this.connect(this.token);
+    }, delay);
+  }
+
+  /**
+   * Start heartbeat mechanism
+   */
+  startHeartbeat() {
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.send({ type: 'ping' });
+      }
+    }, config.ws.heartbeatInterval);
+  }
+
+  /**
+   * Stop heartbeat mechanism
+   */
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  /**
+   * Disconnect
+   */
+  disconnect() {
+    this.isIntentionalClose = true;
+    
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    this.stopHeartbeat();
+
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+
+    this.status = 'disconnected';
+    this.emit('status', 'disconnected');
+  }
+
+  /**
+   * Add event listener
+   */
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(callback);
+
+    // Return unsubscribe function
+    return () => {
+      const callbacks = this.listeners.get(event);
+      if (callbacks) {
+        const index = callbacks.indexOf(callback);
+        if (index > -1) {
+          callbacks.splice(index, 1);
+        }
+      }
+    };
+  }
+
+  /**
+   * Remove event listener
+   */
+  off(event, callback) {
+    const callbacks = this.listeners.get(event);
+    if (callbacks) {
+      const index = callbacks.indexOf(callback);
+      if (index > -1) {
+        callbacks.splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * Emit event to listeners
+   */
+  emit(event, data) {
+    const callbacks = this.listeners.get(event);
+    if (callbacks) {
+      callbacks.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in ${event} listener:`, error);
+        }
+      });
+    }
+  }
+
+  /**
+   * Get connection status
+   */
+  getStatus() {
+    return this.status;
+  }
+
+  /**
+   * Check if connected
+   */
+  isConnected() {
+    return this.status === 'connected' && this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Join project discussion
+   */
+  joinProject(projectId, discussionId) {
+    this.send({
+      type: 'join-project',
+      projectId,
+      discussionId
+    });
+  }
+
+  /**
+   * Send chat message
+   */
+  sendMessage(text) {
+    this.send({
+      type: 'project-chat',
+      text
+    });
+  }
+}
+
+// Create singleton instance
+const websocketService = new WebSocketService();
+
+export default websocketService;
+
+
+=== frontend\src\styles\theme.js ===
+
+// Unified Color Theme - ChatGPT-inspired with purple accents
+export const theme = {
+  // Background colors
+  bg: {
+    primary: '#0d0d0d',      // Main background (darkest)
+    secondary: '#1a1a1a',    // Cards, modals
+    tertiary: '#2d2d2d',     // Hover states, borders
+    sidebar: '#171717',      // Sidebar background
+    iconBar: '#000000',      // Icon bar (darkest)
+    input: '#0d0d0d',        // Input fields
+    hover: 'rgba(255,255,255,0.05)', // Hover overlay
+  },
+  
+  // Text colors
+  text: {
+    primary: '#ececec',      // Main text
+    secondary: '#b4b4b4',    // Secondary text
+    tertiary: '#6b6b6b',     // Muted text
+    disabled: '#4a4a4a',     // Disabled text
+  },
+  
+  // Border colors
+  border: {
+    primary: '#2d2d2d',      // Main borders
+    secondary: '#3d3d3d',    // Lighter borders
+    focus: '#8b5cf6',        // Focus state
+  },
+  
+  // Accent colors
+  accent: {
+    purple: '#8b5cf6',       // Primary purple
+    purpleHover: '#7c3aed',  // Purple hover
+    purpleLight: '#a78bfa',  // Light purple
+    purpleDark: '#6d28d9',   // Dark purple
+  },
+  
+  // Status colors
+  status: {
+    success: '#10b981',
+    error: '#ef4444',
+    warning: '#f59e0b',
+    info: '#3b82f6',
+  },
+  
+  // AI colors
+  ai: {
+    avatar: '#8b5cf6',
+    thinking: '#6d28d9',
+  },
+  
+  // Shadows
+  shadow: {
+    sm: '0 1px 3px rgba(0,0,0,0.3)',
+    md: '0 4px 12px rgba(0,0,0,0.4)',
+    lg: '0 8px 24px rgba(0,0,0,0.5)',
+    purple: '0 4px 12px rgba(139, 92, 246, 0.3)',
+  }
+};
+
+
+=== frontend\src\utils\api.js ===
+
+/**
+ * API Utility
+ * Centralized API calls using config
+ */
+import config from '../config/index.js';
+
+/**
+ * Make an API request
+ * @param {string} endpoint - API endpoint (e.g., '/api/auth/login')
+ * @param {object} options - Fetch options
+ * @returns {Promise<Response>}
+ */
+export const apiRequest = (endpoint, options = {}) => {
+  const url = `${config.apiBaseUrl}${endpoint}`;
+  return fetch(url, options);
+};
+
+/**
+ * Get full API URL for an endpoint
+ * @param {string} endpoint - API endpoint
+ * @returns {string} Full URL
+ */
+export const getApiUrl = (endpoint) => {
+  return `${config.apiBaseUrl}${endpoint}`;
+};
+
+/**
+ * Get WebSocket URL
+ * @returns {string} WebSocket URL
+ */
+export const getWsUrl = () => {
+  return config.wsBaseUrl;
+};
+
+export default apiRequest;
+
+
+=== frontend\src\utils\avatarColors.js ===
+
+// Generate consistent avatar colors based on username
+// Similar to how ChatGPT generates different colors for different users
+
+const AVATAR_COLORS = [
+  '#6366f1', // indigo
+  '#8b5cf6', // purple
+  '#3b82f6', // blue
+  '#0ea5e9', // sky
+  '#14b8a6', // teal
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#f97316', // orange
+  '#ef4444', // red
+  '#ec4899', // pink
+  '#a855f7', // violet
+  '#06b6d4', // cyan
+];
+
+// Simple hash function to convert string to number
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Get consistent color for a username
+export function getAvatarColor(username) {
+  if (!username) return AVATAR_COLORS[0];
+  const hash = hashString(username);
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+// Get initials from username
+export function getInitials(username) {
+  if (!username) return '?';
+  const parts = username.trim().split(' ');
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return username.substring(0, 2).toUpperCase();
+}
+
+
+=== frontend\src\utils\errorHandler.js ===
+
+/**
+ * Error Handler Utility
+ * Provides user-friendly error messages and error classification
+ */
+
+/**
+ * Get user-friendly error message
+ */
+export function getUserFriendlyMessage(error) {
+  // Network errors
+  if (error.code === 'NETWORK_ERROR') {
+    return 'Unable to connect. Please check your internet connection.';
+  }
+
+  // Authentication errors
+  if (error.code === 'AUTHENTICATION_ERROR' || error.statusCode === 401) {
+    return 'Your session has expired. Please log in again.';
+  }
+
+  // Authorization errors
+  if (error.code === 'AUTHORIZATION_ERROR' || error.statusCode === 403) {
+    return 'You don\'t have permission to perform this action.';
+  }
+
+  // Validation errors
+  if (error.code === 'VALIDATION_ERROR' || error.statusCode === 400) {
+    if (error.details && Array.isArray(error.details)) {
+      return error.details.join(', ');
+    }
+    return error.message || 'Invalid input. Please check your data.';
+  }
+
+  // Not found errors
+  if (error.code === 'NOT_FOUND' || error.statusCode === 404) {
+    return 'The requested resource was not found.';
+  }
+
+  // Conflict errors
+  if (error.code === 'CONFLICT' || error.statusCode === 409) {
+    return error.message || 'This resource already exists.';
+  }
+
+  // Rate limit errors
+  if (error.code === 'RATE_LIMIT_EXCEEDED' || error.statusCode === 429) {
+    return 'Too many requests. Please slow down and try again.';
+  }
+
+  // AI service errors
+  if (error.code === 'AI_SERVICE_ERROR' || error.statusCode === 503) {
+    return 'AI service is temporarily unavailable. Please try again.';
+  }
+
+  // Server errors
+  if (error.statusCode >= 500) {
+    return 'Server error. Our team has been notified.';
+  }
+
+  // Default message
+  return error.message || 'Something went wrong. Please try again.';
+}
+
+/**
+ * Check if error is recoverable
+ */
+export function isRecoverableError(error) {
+  const recoverableCodes = [
+    'NETWORK_ERROR',
+    'RATE_LIMIT_EXCEEDED',
+    'AI_SERVICE_ERROR'
+  ];
+
+  const recoverableStatusCodes = [408, 429, 503, 504];
+
+  return (
+    recoverableCodes.includes(error.code) ||
+    recoverableStatusCodes.includes(error.statusCode)
+  );
+}
+
+/**
+ * Check if error requires re-authentication
+ */
+export function requiresReauth(error) {
+  return (
+    error.code === 'AUTHENTICATION_ERROR' ||
+    error.statusCode === 401 ||
+    error.message?.includes('token') ||
+    error.message?.includes('expired')
+  );
+}
+
+/**
+ * Log error for debugging
+ */
+export function logError(error, context = {}) {
+  if (import.meta.env.MODE === 'development') {
+    console.error('Error:', {
+      message: error.message,
+      code: error.code,
+      statusCode: error.statusCode,
+      details: error.details,
+      context,
+      stack: error.stack
+    });
+  }
+}
+
+/**
+ * Handle API error with user feedback
+ */
+export function handleAPIError(error, showToast) {
+  const message = getUserFriendlyMessage(error);
+  logError(error);
+
+  if (showToast) {
+    showToast(message, 'error');
+  }
+
+  // Check if requires re-authentication
+  if (requiresReauth(error)) {
+    // Trigger logout
+    localStorage.removeItem('collab-ai-token');
+    window.location.reload();
+  }
+
+  return message;
+}
+
+
+=== frontend\src\utils\router.js ===
+
+/**
+ * Simple client-side router utilities
+ */
+
+export function getInviteCodeFromUrl() {
+  const path = window.location.pathname;
+  const match = path.match(/\/join\/([a-zA-Z0-9]+)/);
+  return match ? match[1] : null;
+}
+
+export function getDiscussionInviteFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('discussion');
+}
+
+export function clearUrl() {
+  window.history.replaceState({}, document.title, '/');
+}
+
+export function navigateTo(path) {
+  window.history.pushState({}, document.title, path);
+}

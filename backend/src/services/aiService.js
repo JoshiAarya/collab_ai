@@ -51,18 +51,6 @@ class AIService {
       llmConfig
     });
   }
-
-  /**
-   * Generate dashboard insights (delegates to orchestrator)
-   */
-  async generateDashboardInsights(projectId, llmConfig) {
-    logger.info('aiService.generateDashboardInsights called - delegating to orchestrator');
-    
-    return await AIOrchestrator.handleDashboardInsights({
-      projectId,
-      llmConfig
-    });
-  }
 }
 
 export default new AIService();

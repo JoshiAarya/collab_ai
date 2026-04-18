@@ -2,20 +2,18 @@
 // Similar to how ChatGPT generates different colors for different users
 
 const AVATAR_COLORS = [
-  '#ef4444', // red
-  '#f97316', // orange
-  '#f59e0b', // amber
-  '#84cc16', // lime
-  '#10b981', // emerald
-  '#14b8a6', // teal
-  '#06b6d4', // cyan
-  '#3b82f6', // blue
   '#6366f1', // indigo
   '#8b5cf6', // purple
-  '#a855f7', // violet
-  '#d946ef', // fuchsia
+  '#3b82f6', // blue
+  '#0ea5e9', // sky
+  '#14b8a6', // teal
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#f97316', // orange
+  '#ef4444', // red
   '#ec4899', // pink
-  '#f43f5e', // rose
+  '#a855f7', // violet
+  '#06b6d4', // cyan
 ];
 
 // Simple hash function to convert string to number

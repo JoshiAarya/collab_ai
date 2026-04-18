@@ -1,0 +1,819 @@
+﻿[dotenv@17.2.3] injecting env (0) from .env -- tip: ­ƒöÉ prevent committing .env to code: https://dotenvx.com/precommit
+Ôä╣´©Å [2026-04-14T05:49:36.301Z] INFO: EncryptionService initialized with AES-256-GCM
+Ôä╣´©Å [2026-04-14T05:49:36.343Z] INFO: MongoDB Connected: localhost
+{
+  "database": "collab-ai",
+  "poolSize": 10
+}
+Connected to DB
+
+
+=== QUESTION 1 ===
+Three weeks into the project, the team changed a major technical decision. What was it, what replaced it, and who drove that change?
+
+Ôä╣´©Å [2026-04-14T05:49:36.416Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "21daad44-2ba1-4ffa-9bd7-491096d4eb2f",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 132
+}
+Ôä╣´©Å [2026-04-14T05:49:36.450Z] INFO: Initializing local embedding model
+{
+  "model": "Xenova/all-MiniLM-L6-v2"
+}
+Ôä╣´©Å [2026-04-14T05:49:36.633Z] INFO: Embedding model initialized successfully
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "dimensions": 384
+}
+Ôä╣´©Å [2026-04-14T05:49:36.647Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 132,
+  "vectorLength": 384,
+  "duration": "197ms"
+}
+­ƒöì [2026-04-14T05:49:36.680Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:49:36.683Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3137",
+  "duration": "36ms"
+}
+Ôä╣´©Å [2026-04-14T05:49:36.686Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1095",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T05:49:36.716Z] DEBUG: LLM request validated
+{
+  "requestId": "21daad44-2ba1-4ffa-9bd7-491096d4eb2f",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2253
+}
+Ôä╣´©Å [2026-04-14T05:49:39.279Z] INFO: LLM call completed
+{
+  "requestId": "21daad44-2ba1-4ffa-9bd7-491096d4eb2f",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2253,
+  "durationMs": 2563,
+  "outputTokens": 77,
+  "totalTokens": 1635
+}
+Ôä╣´©Å [2026-04-14T05:49:39.279Z] INFO: AI: Response generated
+{
+  "requestId": "21daad44-2ba1-4ffa-9bd7-491096d4eb2f",
+  "provider": "groq",
+  "responseLength": 326
+}
+--- RESPONSE ---
+The major technical decision made three weeks into the project was switching from Jenkins to GitHub Actions for the CI/CD pipeline. This change was driven by Aarya. 
+
+Original Quote:
+'CI/CD pipeline will be established using GitHub Actions, integrating with ECR and ECS. (rationale: Jenkins is a headache.) ÔÇö Aarya, 14/4/2026'
+
+
+=== QUESTION 2 ===
+What decisions has Prathamesh specifically proposed or been responsible for across the entire project?
+
+Ôä╣´©Å [2026-04-14T05:49:39.279Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "2784ab34-4868-430e-8f75-6530436e2655",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 102
+}
+Ôä╣´©Å [2026-04-14T05:49:39.297Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 102,
+  "vectorLength": 384,
+  "duration": "7ms"
+}
+­ƒöì [2026-04-14T05:49:39.318Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:49:39.318Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3661",
+  "duration": "21ms"
+}
+Ôä╣´©Å [2026-04-14T05:49:39.326Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1842",
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T05:49:39.340Z] DEBUG: LLM request validated
+{
+  "requestId": "2784ab34-4868-430e-8f75-6530436e2655",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2207
+}
+Ôä╣´©Å [2026-04-14T05:49:55.805Z] INFO: LLM call completed
+{
+  "requestId": "2784ab34-4868-430e-8f75-6530436e2655",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2207,
+  "durationMs": 16465,
+  "outputTokens": 193,
+  "totalTokens": 1725
+}
+Ôä╣´©Å [2026-04-14T05:49:55.805Z] INFO: AI: Response generated
+{
+  "requestId": "2784ab34-4868-430e-8f75-6530436e2655",
+  "provider": "groq",
+  "responseLength": 918
+}
+--- RESPONSE ---
+Across the entire project, Prathamesh has specifically proposed or been responsible for the following decisions:
+
+1. **Webhooks for updates**: Prathamesh proposed using webhooks instead of polling for updates, which will be backed by SQS for strict reliability. This decision was made on April 14, 2026.
+
+2. **CI/CD Pipeline**: Although not explicitly mentioned as his proposal, Prathamesh likely contributed to or agreed with the decision of establishing a CI/CD pipeline using GitHub Actions, integrating with ECR and ECS, as mentioned on April 14, 2026.
+
+3. **Solid Integrations**: Prathamesh signed off, stating that integrations are completely solid, indicating that he is satisfied with the integration decisions made throughout the project.
+
+4. **Stripe for subscription model**: Prathamesh was tasked with looking at Stripe for the system subscription model, allowing companies to pay for full platform access.
+
+
+=== QUESTION 3 ===
+We originally chose one approach for document signing but switched. What was the original choice, why did we switch, and what problem triggered it?
+
+Ôä╣´©Å [2026-04-14T05:49:55.805Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "c96f985e-c08c-4466-b3ea-c321d890a16d",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 147
+}
+Ôä╣´©Å [2026-04-14T05:49:55.825Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 147,
+  "vectorLength": 384,
+  "duration": "9ms"
+}
+­ƒöì [2026-04-14T05:49:55.858Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:49:55.858Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.5331",
+  "duration": "33ms"
+}
+Ôä╣´©Å [2026-04-14T05:49:55.862Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.2709",
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T05:49:55.872Z] DEBUG: LLM request validated
+{
+  "requestId": "c96f985e-c08c-4466-b3ea-c321d890a16d",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2247
+}
+Ôä╣´©Å [2026-04-14T05:50:12.469Z] INFO: LLM call completed
+{
+  "requestId": "c96f985e-c08c-4466-b3ea-c321d890a16d",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2247,
+  "durationMs": 16599,
+  "outputTokens": 95,
+  "totalTokens": 1647
+}
+Ôä╣´©Å [2026-04-14T05:50:12.469Z] INFO: AI: Response generated
+{
+  "requestId": "c96f985e-c08c-4466-b3ea-c321d890a16d",
+  "provider": "groq",
+  "responseLength": 546
+}
+--- RESPONSE ---
+The original choice for document signing was Dropbox Sign. The team chose this approach due to its embedded signing capabilities, which handled dynamic custom fields better than other options.
+
+However, during the project, a problem or requirement triggered a change in this decision. The specific problem that led to the change wasn't explicitly mentioned, but it was mentioned that the new approach had "embedded signing capabilities" which implies that it was chosen for the ability to dynamically generate and customize fields and signatures.
+
+
+=== QUESTION 4 ===
+Which decisions made during planning were later revised during development, and what caused each revision?
+
+Ôä╣´©Å [2026-04-14T05:50:12.469Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "6ed715a9-bbe7-4678-b678-3bf2741fb55c",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 106
+}
+Ôä╣´©Å [2026-04-14T05:50:12.486Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 106,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T05:50:12.520Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:50:12.520Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3497",
+  "duration": "34ms"
+}
+Ôä╣´©Å [2026-04-14T05:50:12.523Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1367",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T05:50:12.531Z] DEBUG: LLM request validated
+{
+  "requestId": "6ed715a9-bbe7-4678-b678-3bf2741fb55c",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2237
+}
+Ôä╣´©Å [2026-04-14T05:50:29.288Z] INFO: LLM call completed
+{
+  "requestId": "6ed715a9-bbe7-4678-b678-3bf2741fb55c",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2237,
+  "durationMs": 16757,
+  "outputTokens": 310,
+  "totalTokens": 1848
+}
+Ôä╣´©Å [2026-04-14T05:50:29.288Z] INFO: AI: Response generated
+{
+  "requestId": "6ed715a9-bbe7-4678-b678-3bf2741fb55c",
+  "provider": "groq",
+  "responseLength": 1335
+}
+--- RESPONSE ---
+During the project planning phase, the following decisions were made:
+
+1. **Frontend state management will use Redux.** - Nikunj, 14/4/2026
+2. **Backend state management will use Zustand and React Query for server caching.** - Digambar, 14/4/2026
+3. **Dropbox Sign is chosen for MVP compliance testing due to embedded signing capabilities.** - Nikunj, 14/4/2026
+4. **Webhooks will be used instead of polling for updates.** - Prathamesh, 14/4/2026
+5. **AWS is selected as the most suitable cloud platform.** - Nikunj, 14/4/2026
+6. **Strictly verify tenant ownership in RBAC middleware before returning resource data.** - Nikunj, 14/4/2026
+
+During the development phase, there is no clear indication of any major revisions to the decisions made during the planning phase. However, there might be minor adjustments that were not explicitly mentioned in the conversation.
+
+The closest thing to a revision is when Digambar mentioned using MongoDB in the planning phase for its flexibility, but then Nikunj decided to use Postgres due to the need for complex relational queries. This was not necessarily a revision, but rather a decision based on the evolving requirements of the project.
+
+It's worth noting that the project progressed smoothly, and the team was able to launch the MVP without significant revisions to the initial decisions.
+
+
+=== QUESTION 5 ===
+What security issues were found and how were each of them resolved? Who was responsible for each fix?
+
+Ôä╣´©Å [2026-04-14T05:50:29.289Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "5be24208-9bcb-40fa-8c62-d0d21597ad89",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 101
+}
+Ôä╣´©Å [2026-04-14T05:50:29.303Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 101,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T05:50:29.324Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:50:29.324Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3475",
+  "duration": "21ms"
+}
+Ôä╣´©Å [2026-04-14T05:50:29.329Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1388",
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T05:50:29.341Z] DEBUG: LLM request validated
+{
+  "requestId": "5be24208-9bcb-40fa-8c62-d0d21597ad89",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2226
+}
+Ôä╣´©Å [2026-04-14T05:50:46.808Z] INFO: LLM call completed
+{
+  "requestId": "5be24208-9bcb-40fa-8c62-d0d21597ad89",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2226,
+  "durationMs": 17467,
+  "outputTokens": 312,
+  "totalTokens": 1853
+}
+Ôä╣´©Å [2026-04-14T05:50:46.809Z] INFO: AI: Response generated
+{
+  "requestId": "5be24208-9bcb-40fa-8c62-d0d21597ad89",
+  "provider": "groq",
+  "responseLength": 1785
+}
+--- RESPONSE ---
+Unfortunately, the conversation doesn't explicitly mention security issues found during testing. However, based on the decisions made during the development phase, we can infer that security was a priority.
+
+From the conversation, we can identify the following security-related discussions:
+
+1. Tenant ownership verification: Nikunj mentioned that they would "strictly verify tenant ownership in RBAC middleware before returning resource data." This suggests that they implemented a robust RBAC (Role-Based Access Control) system to ensure that each tenant has control over their own data.
+
+2. Authentication: Nikunj mentioned that they would "nail down the auth and RBAC strategy in the Backend thread." This implies that they implemented a secure authentication system to ensure that only authorized users can access the platform.
+
+3. Compliance documents: Digambar mentioned that MongoDB was suggested for its flexibility in handling unpredictable metadata formats. However, Nikunj suggested using Postgres with JSONB columns, which provides both relational integrity and document flexibility. This decision ensures that compliance documents are stored securely and can be queried correctly.
+
+While we can't pinpoint specific security issues found during testing, we can assume that the team thoroughly tested the platform's security features, including authentication, RBAC, and data storage.
+
+In terms of who was responsible for each fix, we can infer that:
+
+* Nikunj was responsible for implementing the RBAC system and verifying tenant ownership.
+* The Backend team was responsible for implementing the authentication system and ensuring proper RBAC functionality.
+* The team collectively ensured that compliance documents were stored securely using Postgres with JSONB columns.
+
+
+=== QUESTION 6 ===
+If a new backend engineer joins today, what are the three most important architectural decisions they need to know about and why were they made?
+
+Ôä╣´©Å [2026-04-14T05:50:46.809Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "7c44cf02-485d-4301-9ae6-27d26b04e7e2",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 144
+}
+Ôä╣´©Å [2026-04-14T05:50:46.824Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 144,
+  "vectorLength": 384,
+  "duration": "7ms"
+}
+­ƒöì [2026-04-14T05:50:46.839Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:50:46.841Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.4921",
+  "duration": "16ms"
+}
+Ôä╣´©Å [2026-04-14T05:50:46.843Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.2354",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T05:50:46.853Z] DEBUG: LLM request validated
+{
+  "requestId": "7c44cf02-485d-4301-9ae6-27d26b04e7e2",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2260
+}
+Ôä╣´©Å [2026-04-14T05:51:07.080Z] INFO: LLM call completed
+{
+  "requestId": "7c44cf02-485d-4301-9ae6-27d26b04e7e2",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2260,
+  "durationMs": 20228,
+  "outputTokens": 283,
+  "totalTokens": 1840
+}
+Ôä╣´©Å [2026-04-14T05:51:07.080Z] INFO: AI: Response generated
+{
+  "requestId": "7c44cf02-485d-4301-9ae6-27d26b04e7e2",
+  "provider": "groq",
+  "responseLength": 1538
+}
+--- RESPONSE ---
+If a new backend engineer joins today, here are the three most important architectural decisions they need to know about:
+
+1. **Using ECS with Fargate instead of EKS**: This decision was made to avoid the complexity and overhead of managing a Kubernetes cluster (EKS) for the current engineering footprint. ECS with Fargate provides a more streamlined and managed experience for container orchestration, which aligns with the team's needs for v1. This decision simplifies the infrastructure and reduces the learning curve for new team members.
+
+2. **Choosing Postgres with JSONB columns**: The team selected Postgres as the primary database due to its ability to handle complex relational queries and its support for JSONB columns. This allows for both relational integrity and document flexibility, making it an excellent choice for storing compliance files with unpredictable metadata formats. This decision ensures that the database can scale with the application's needs and provides a robust foundation for data storage.
+
+3. **Selecting AWS as the cloud platform**: The team chose AWS due to the organization's existing billing and tooling, which simplifies the process of managing costs and resources. This decision also allows for seamless integration with other AWS services, reducing the need for custom solutions and making it easier to scale the application.
+
+These decisions were made to ensure the team can deliver a functional and scalable MVP quickly, while also setting up the foundation for future growth and development.
+
+
+=== QUESTION 7 ===
+What performance problems did we hit and what was the before and after for each?
+
+Ôä╣´©Å [2026-04-14T05:51:07.080Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "4146c02d-925c-4b31-b479-f04e10fdf6c1",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 80
+}
+Ôä╣´©Å [2026-04-14T05:51:07.094Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 80,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T05:51:07.109Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:51:07.110Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3462",
+  "duration": "15ms"
+}
+Ôä╣´©Å [2026-04-14T05:51:07.112Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1199",
+  "duration": "2ms"
+}
+­ƒöì [2026-04-14T05:51:07.123Z] DEBUG: LLM request validated
+{
+  "requestId": "4146c02d-925c-4b31-b479-f04e10fdf6c1",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2236
+}
+Ôä╣´©Å [2026-04-14T05:51:24.964Z] INFO: LLM call completed
+{
+  "requestId": "4146c02d-925c-4b31-b479-f04e10fdf6c1",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2236,
+  "durationMs": 17842,
+  "outputTokens": 208,
+  "totalTokens": 1751
+}
+Ôä╣´©Å [2026-04-14T05:51:24.964Z] INFO: AI: Response generated
+{
+  "requestId": "4146c02d-925c-4b31-b479-f04e10fdf6c1",
+  "provider": "groq",
+  "responseLength": 1127
+}
+--- RESPONSE ---
+From the conversation, it seems that we didn't explicitly discuss any major performance problems. However, Nikunj mentioned "debugging everything" during the Testing phase, which might imply some minor issues were encountered. But we didn't discuss specific performance problems and their before-and-after metrics.
+
+However, we did discuss some technical decisions that might have an impact on performance:
+
+1. **Database choice**: We chose Postgres over MongoDB for its better support of complex relational queries, which might have helped with performance.
+2. **Storage**: We decided to keep storage local to S3 buckets, which should help with performance, especially for large files.
+3. **Frontend state management**: We decided to use Redux for frontend state management, which might have implications for performance, but we didn't discuss it in detail.
+
+If we expand on the conversation, we might have encountered some performance problems during sprint 1 development or testing phase. However, based on the provided conversation, it's difficult to pinpoint specific performance issues and their before-and-after metrics.
+
+
+=== QUESTION 8 ===
+Has the team's approach to email notifications changed at any point? If so what changed and why?
+
+Ôä╣´©Å [2026-04-14T05:51:24.964Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "8227b365-c347-41d6-9693-b04615153dd4",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 96
+}
+Ôä╣´©Å [2026-04-14T05:51:24.979Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 96,
+  "vectorLength": 384,
+  "duration": "5ms"
+}
+­ƒöì [2026-04-14T05:51:24.997Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:51:24.998Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.6042",
+  "duration": "19ms"
+}
+Ôä╣´©Å [2026-04-14T05:51:25.002Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.3371",
+  "duration": "4ms"
+}
+­ƒöì [2026-04-14T05:51:25.014Z] DEBUG: LLM request validated
+{
+  "requestId": "8227b365-c347-41d6-9693-b04615153dd4",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2225
+}
+Ôä╣´©Å [2026-04-14T05:51:42.620Z] INFO: LLM call completed
+{
+  "requestId": "8227b365-c347-41d6-9693-b04615153dd4",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2225,
+  "durationMs": 17606,
+  "outputTokens": 70,
+  "totalTokens": 1618
+}
+Ôä╣´©Å [2026-04-14T05:51:42.620Z] INFO: AI: Response generated
+{
+  "requestId": "8227b365-c347-41d6-9693-b04615153dd4",
+  "provider": "groq",
+  "responseLength": 362
+}
+--- RESPONSE ---
+Yes, the team's approach to email notifications changed during the project. Initially, the team discussed sending instant transaction emails, but it was decided to use a daily digest batch job instead. This decision was made for safety and user experience reasons, with Prathamesh stating that it's "much safer and less annoying" than instant transaction emails.
+
+
+=== QUESTION 9 ===
+What work did each team member commit to doing by end of the project?
+
+Ôä╣´©Å [2026-04-14T05:51:42.620Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "40ba7021-f679-4cca-9cd8-57b5c98a2e32",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 69
+}
+Ôä╣´©Å [2026-04-14T05:51:42.634Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 69,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T05:51:42.649Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:51:42.649Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3810",
+  "duration": "15ms"
+}
+Ôä╣´©Å [2026-04-14T05:51:42.652Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1562",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T05:51:42.660Z] DEBUG: LLM request validated
+{
+  "requestId": "40ba7021-f679-4cca-9cd8-57b5c98a2e32",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2219
+}
+Ôä╣´©Å [2026-04-14T05:51:59.588Z] INFO: LLM call completed
+{
+  "requestId": "40ba7021-f679-4cca-9cd8-57b5c98a2e32",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2219,
+  "durationMs": 16928,
+  "outputTokens": 301,
+  "totalTokens": 1831
+}
+Ôä╣´©Å [2026-04-14T05:51:59.588Z] INFO: AI: Response generated
+{
+  "requestId": "40ba7021-f679-4cca-9cd8-57b5c98a2e32",
+  "provider": "groq",
+  "responseLength": 1380
+}
+--- RESPONSE ---
+Based on the conversation, here's what each team member committed to doing by the end of the project:
+
+1. Aarya:
+   - Handled the initial VPC and DB setup (chosen AWS for its existing billing and tooling).
+   - Checked the strict IAM roles needed to manage S3 bucket access.
+   - Locked environments for a formal production launch.
+   - Signed off at the end.
+
+2. Adarsh:
+   - Was involved in discussions around microservices vs monolith approach.
+   - Signed off at the end, mentioning the QA board was empty, indicating great stability.
+
+3. Digambar:
+   - Participated in discussions around MongoDB, Postgres, and JSONB columns for database needs.
+   - Set up the Frontend thread to finalize UI stack choices.
+   - Signed off at the end, mentioning stellar work and going offline for a week.
+
+4. Nikunj:
+   - Led discussions around monolith vs microservices, database architecture, and backend authentication.
+   - Chaired the decision-making process for various project aspects.
+   - Led the team through development, testing, and the launch of the BuildBoard MVP.
+   - Expressed pride in the team's work at the end.
+
+5. Prathamesh:
+   - Looked into Stripe for the system subscription model.
+   - Contributed to discussions around database architecture and daily digest batch jobs.
+   - Mentioned integrations were completely solid at the end, indicating his work was complete.
+
+
+=== QUESTION 10 ===
+What would you say are the unresolved risks or open questions in this project as it stands?
+
+Ôä╣´©Å [2026-04-14T05:51:59.588Z] INFO: AI: Orchestrator received request
+{
+  "requestId": "69f5b875-ae80-44a4-ae35-906156c36aef",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "discussionId": "69ddd547bd43c0d6a218e9df",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "promptLength": 91
+}
+Ôä╣´©Å [2026-04-14T05:51:59.603Z] INFO: AI: Embedding generated
+{
+  "model": "Xenova/all-MiniLM-L6-v2",
+  "textLength": 91,
+  "vectorLength": 384,
+  "duration": "6ms"
+}
+­ƒöì [2026-04-14T05:51:59.618Z] DEBUG: Computing message similarities
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "messageCount": 177,
+  "topK": 15
+}
+Ôä╣´©Å [2026-04-14T05:51:59.618Z] INFO: AI: Vector message search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalMessages": 177,
+  "topK": 15,
+  "resultsFound": 15,
+  "topSimilarity": "0.3027",
+  "duration": "15ms"
+}
+Ôä╣´©Å [2026-04-14T05:51:59.622Z] INFO: AI: Vector decision search completed
+{
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "totalDecisions": 16,
+  "topK": 8,
+  "resultsFound": 8,
+  "topSimilarity": "0.1138",
+  "duration": "3ms"
+}
+­ƒöì [2026-04-14T05:51:59.632Z] DEBUG: LLM request validated
+{
+  "requestId": "69f5b875-ae80-44a4-ae35-906156c36aef",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "tokenCount": 2215
+}
+Ôä╣´©Å [2026-04-14T05:52:17.474Z] INFO: LLM call completed
+{
+  "requestId": "69f5b875-ae80-44a4-ae35-906156c36aef",
+  "projectId": "69ddd547bd43c0d6a218e9dc",
+  "provider": "groq",
+  "model": "llama-3.1-8b-instant",
+  "inputTokens": 2215,
+  "durationMs": 17842,
+  "outputTokens": 243,
+  "totalTokens": 1781
+}
+Ôä╣´©Å [2026-04-14T05:52:17.474Z] INFO: AI: Response generated
+{
+  "requestId": "69f5b875-ae80-44a4-ae35-906156c36aef",
+  "provider": "groq",
+  "responseLength": 1283
+}
+--- RESPONSE ---
+Based on the project discussion, here are some unresolved risks or open questions:
+
+1. **Mobile App Development**: Although it's out of scope for the MVP, it's essential to revisit this decision in the future, considering the construction workers' on-site nature.
+2. **RBAC Strategy**: While authentication was mentioned, the Role-Based Access Control (RBAC) strategy is still an open question, which is crucial for subcontractors' access control and data visibility.
+3. **Compliance with Unpredictable Metadata Formats**: Although JSONB columns in Postgres provide document flexibility, it's unclear how well the system will handle completely unpredictable metadata formats in compliance documents.
+4. **Long-term Scalability**: While the initial infrastructure layout is being drafted, it's essential to ensure that the system's architecture can scale to meet the demands of a larger user base and more complex project management needs.
+5. **Integration with Future Features**: As the platform evolves, it's crucial to ensure seamless integration with new features, such as mobile apps, and to address potential technical debt.
+
+By acknowledging these open questions, the team can plan for future development, testing, and maintenance to ensure the long-term success of BuildBoard.
