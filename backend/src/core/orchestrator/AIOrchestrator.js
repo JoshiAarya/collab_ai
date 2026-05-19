@@ -103,9 +103,14 @@ class AIOrchestrator {
       // Streaming is only supported for Groq/server for now
       const provider = selectedModel.provider;
       if (provider === 'groq' || provider === 'server') {
-        const fullText = await this.callGroqStreaming({
-          model: selectedModel.model, messages, maxTokens: 1024, apiKey
-        }, onChunk);
+        const fullText = await LLMGuardrails.guardedCall(
+          { requestId, provider: selectedModel.provider, model: selectedModel.model, messages, projectId },
+          async () => {
+            return await this.callGroqStreaming({
+              model: selectedModel.model, messages, maxTokens: 1024, apiKey
+            }, onChunk);
+          }
+        );
         logger.ai('Streaming response complete', { requestId, provider, responseLength: fullText.length });
         return fullText;
       }

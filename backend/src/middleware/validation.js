@@ -68,12 +68,7 @@ export const schemas = {
   },
 
   updateLLM: {
-    provider: { 
-      type: 'enum', 
-      required: true, 
-      values: ['groq', 'openai', 'anthropic', 'google', 'server'] 
-    },
-    model: { type: 'string', required: true, min: 1, max: 100 }
+    activeLLM: { type: 'object', required: true }
   },
 
   // Discussion schemas

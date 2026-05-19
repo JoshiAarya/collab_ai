@@ -189,7 +189,8 @@ class ConnectionManager {
         user: m.user,
         text: m.text,
         time: m.timestamp,
-        isAI: m.isAI
+        isAI: m.isAI,
+        isSaved: !!m.isSaved
       }));
 
       this.send(ws, { 

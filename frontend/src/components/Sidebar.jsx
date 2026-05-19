@@ -43,7 +43,23 @@ export default function Sidebar({ children, footerContent, iconBarContent, onTog
 
       {/* Sidebar */}
       {isOpen && (
-        <div className="sidebar-container" style={styles.sidebar}>
+        <>
+          {/* Mobile backdrop - click to close sidebar */}
+          <div 
+            className="sidebar-backdrop"
+            onClick={onToggle}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              zIndex: 998,
+              display: 'none'
+            }}
+          />
+          <div className="sidebar-container" style={styles.sidebar}>
           <div style={styles.sidebarContent}>
             {children}
           </div>
@@ -154,6 +170,7 @@ export default function Sidebar({ children, footerContent, iconBarContent, onTog
             </div>
           </div>
         </div>
+        </>
       )}
       
       {showProfileModal && (

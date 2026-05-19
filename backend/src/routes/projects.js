@@ -7,6 +7,9 @@ import summaryService from '../services/summaryService.js';
 import aiService from '../services/aiService.js';
 import Decision from '../models/Decision.js';
 import crypto from 'crypto';
+import connectionManager from '../services/connectionManager.js';
+
+import { validate } from '../middleware/validation.js';
 
 const router = express.Router();
 
@@ -14,7 +17,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Create project
-router.post('/', async (req, res) => {
+router.post('/', validate('createProject'), async (req, res) => {
   try {
     const { title, problemStatement } = req.body;
 
@@ -66,7 +69,7 @@ router.get('/:projectId', async (req, res) => {
 });
 
 // Join project via invite code
-router.post('/join', async (req, res) => {
+router.post('/join', validate('joinProject'), async (req, res) => {
   try {
     const { inviteCode, discussionId } = req.body;
 
@@ -212,7 +215,7 @@ router.patch('/:projectId/stage', async (req, res) => {
 });
 
 // Update project (general)
-router.patch('/:projectId', async (req, res) => {
+router.put('/:projectId', validate('updateProject'), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { activeLLM, stage } = req.body;
@@ -235,7 +238,7 @@ router.patch('/:projectId', async (req, res) => {
 });
 
 // Update LLM configuration
-router.put('/:projectId/llm', async (req, res) => {
+router.put('/:projectId/llm', validate('updateLLM'), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { activeLLM } = req.body;
@@ -312,10 +315,11 @@ router.get('/:projectId/discussions', async (req, res) => {
 });
 
 // Create parallel discussion
-router.post('/:projectId/discussions', async (req, res) => {
+router.post('/:projectId/discussions', validate('createDiscussion'), async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { name, description } = req.body;
+    const { title, description } = req.body;
+    const name = title || req.body.name; // Fallback for backwards compatibility
 
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
     if (!isMember) {
@@ -459,8 +463,8 @@ router.get('/:projectId/documents/:documentId/chunks', async (req, res) => {
   }
 });
 
-// Upload document
-router.post('/:projectId/documents', async (req, res) => {
+// Upload document for context
+router.post('/:projectId/documents', validate('uploadDocument'), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { title, content, fileType } = req.body;
@@ -635,6 +639,11 @@ router.post('/:projectId/decisions', async (req, res) => {
     const message = await Message.findById(messageId);
     if (!message) return res.status(404).json({ success: false, error: 'Message not found' });
 
+    const existingDecision = await Decision.findOne({ sourceMessageId: messageId });
+    if (existingDecision) {
+      return res.json({ success: true, decision: existingDecision, message: 'Already saved' });
+    }
+
     // Save immediately with raw text
     const decision = await Decision.create({
       projectId,
@@ -643,6 +652,12 @@ router.post('/:projectId/decisions', async (req, res) => {
       proposedBy: { userId: message.userId, username: message.user },
       sourceMessageId: messageId,
       discussionId
+    });
+
+    // Broadcast to discussion that this message was saved
+    connectionManager.broadcastToDiscussion(discussionId, {
+      type: 'message-saved',
+      messageId: messageId
     });
 
     // Respond instantly
@@ -655,11 +670,18 @@ router.post('/:projectId/decisions', async (req, res) => {
         const project = await projectService.getProjectById(projectId);
         const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.\nSpeaker: ${message.user}\nRaw message: "${message.text}"\n\nWrite a single clean declarative statement capturing the decision made. Rules:\n- Start with a verb or technology name\n- Maximum 15 words\n- Never use first person\n- Never quote the raw text verbatim\n- If the message contains a clear reason, extract it as rationale separately\n\nReturn ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}\nRationale can be empty string if no clear reason given.`;
 
+        const crypto = await import('crypto');
         const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };
         const selectedModel = AIOrchestrator.selectModel(llmConfig);
         const response = await AIOrchestrator.callProvider({
-          requestId: crypto.randomUUID(), provider: selectedModel.provider,
-          model: selectedModel.model, prompt, projectId, userId: req.user.userId, maxTokens: 1024
+          requestId: crypto.randomUUID(), 
+          provider: selectedModel.provider,
+          model: selectedModel.model, 
+          prompt, 
+          systemPrompt: 'You are an AI decision extractor.',
+          projectId, 
+          userId: req.user.userId, 
+          maxTokens: 1024
         });
         const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(cleaned);

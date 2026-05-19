@@ -786,15 +786,15 @@ Both exist and are used by different parts of the frontend. They do the same thi
 
 2. **~~`AIOrchestrator.getApiKey()` for user providers uses bracket notation on a Mongoose Map.~~ (RESOLVED)** The `getProjectApiKey` explicitly retrieves and selects `+apiKeys` locally inside `projectService.js` yielding decryption dynamically prior to LLM interaction.
 
-3. **Streaming calls bypass `LLMGuardrails`.** `handleStreamingRequest()` calls `callGroqStreaming()` directly — no `guardedCall()`, no timeout, no retry, no validation. Only `callProvider()` (non-streaming) uses guardrails.
+3. **~~Streaming calls bypass `LLMGuardrails`.~~ (RESOLVED)** `handleStreamingRequest()` is now wrapped within `LLMGuardrails.guardedCall()`.
 
-4. **Summary `messageRange` is always `{ start: now, end: now }`.** `summaryService.createSummary()` sets both to `new Date()`. It never reflects the actual message time range.
+4. **~~Summary `messageRange` is always `{ start: now, end: now }`.~~ (RESOLVED)** `summaryService.createSummary()` correctly queries `Message` models for the oldest and bounds dynamically.
 
-5. **`bcrypt` and `bcryptjs` coexist.** `authService.js` imports native `bcrypt`, `routes/user.js` imports `bcryptjs`. Both hash with 10 rounds. This is functionally safe but wasteful.
+5. **~~`bcrypt` and `bcryptjs` coexist.~~ (RESOLVED)** `user.js` and `package.json` converted consistently to `bcrypt`.
 
-6. **Discussion creation route expects `name` field, validation schema has `title`.** Route reads `req.body.name` at line 319, but `validate('createDiscussion')` schema expects `title`. The validation middleware is not applied to this route, so it works despite the mismatch.
+6. **~~Discussion creation route expects `name` field, validation schema has `title`.~~ (RESOLVED)** Fallback logic implements seamless retrofitting, paired natively with `validate('createDiscussion')`.
 
-7. **No validation middleware on most routes.** Only `register` and `login` routes use `validate()`. All other routes do manual validation or none.
+7. **~~No validation middleware on most routes.~~ (RESOLVED)** Validations strictly applied across major Express route mutations.
 
 ---
 

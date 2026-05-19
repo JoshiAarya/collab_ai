@@ -101,8 +101,26 @@ class DiscussionService {
         .limit(limit)
         .lean();
 
+      // Look up decisions to check if these messages are saved
+      const Decision = (await import('../models/Decision.js')).default;
+      const messageIds = messages.map(m => m._id);
+      
+      const decisions = await Decision.find({
+        $or: [
+          { sourceMessageId: { $in: messageIds } },
+          { messageId: { $in: messageIds.map(id => String(id)) } }
+        ]
+      }).select('sourceMessageId messageId').lean();
+
+      const savedMessageIds = new Set(
+        decisions.map(d => String(d.sourceMessageId || d.messageId))
+      );
+
       // Reverse to get chronological order (oldest to newest)
-      return messages.reverse();
+      return messages.reverse().map(m => ({
+        ...m,
+        isSaved: savedMessageIds.has(String(m._id))
+      }));
     } catch (error) {
       console.error('Error getting discussion messages:', error);
       return [];

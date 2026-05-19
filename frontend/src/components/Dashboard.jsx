@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../utils/api.js';
 
-export default function Dashboard({ project, onClose, token, colors }) {
+export default function Dashboard({ project, onClose, token, colors, onSourceClick }) {
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,12 +117,17 @@ export default function Dashboard({ project, onClose, token, colors }) {
                         {new Date(decision.timestamp).toLocaleDateString()}
                       </span>
                     </div>
-                    {decision.sourceMessageId && (
+                    {(decision.sourceMessageId || decision.messageId) && (
                       <span
                         style={{ fontSize: '12px', color: '#667eea', cursor: 'pointer', textDecoration: 'underline' }}
-                        title="Source message ID — click to copy"
+                        title="Go to source message"
                         onClick={() => {
-                          navigator.clipboard.writeText(decision.sourceMessageId);
+                          const srcId = decision.sourceMessageId || decision.messageId;
+                          if (onSourceClick) {
+                            onSourceClick(decision.discussionId, srcId);
+                          } else {
+                            navigator.clipboard.writeText(srcId);
+                          }
                         }}
                       >
                         Source
@@ -148,7 +153,7 @@ export default function Dashboard({ project, onClose, token, colors }) {
             </div>
 
             {totalPages > 1 && (
-              <div style={styles.pagination}>
+              <div className="pagination-responsive" style={styles.pagination}>
                 <button
                   style={{ ...styles.pageBtn, background: colors.surface, color: colors.text, border: `1px solid ${colors.border}`, opacity: currentPage === 1 ? 0.5 : 1 }}
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -243,7 +248,7 @@ const styles = {
   },
   decisionGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
     gap: '20px'
   },
   decisionCard: {

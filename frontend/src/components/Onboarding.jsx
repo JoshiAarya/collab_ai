@@ -71,7 +71,7 @@ export default function Onboarding({ onComplete }) {
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div className="onboarding-modal-responsive" style={styles.modal}>
         <button onClick={handleSkip} style={styles.skipButton}>
           Skip
         </button>

@@ -199,7 +199,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
             setShowDropdown(false);
             setSelectedProvider(null);
           }} />
-          <div style={{...styles.dropdown, background: colors.surface, border: `1px solid ${colors.border}`}}>
+          <div className="model-dropdown-responsive" style={{...styles.dropdown, background: colors.surface, border: `1px solid ${colors.border}`}}>
             <input
               type="text"
               placeholder="Search models..."
@@ -222,7 +222,12 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                     }}
                     onClick={() => {
                       if (provider.comingSoon) return;
-                      if (id === 'server') handleModelSelect('server', 'server');
+                      if (id === 'server') {
+                        handleModelSelect('server', 'server');
+                      } else {
+                        setSelectedProvider(id);
+                        setSearchQuery('');
+                      }
                     }}
                     onMouseEnter={(e) => { if (!provider.comingSoon) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -397,7 +402,9 @@ const styles = {
     background: '#1a1a1a',
     border: '1px solid #2d2d2d',
     borderRadius: '12px',
-    minWidth: '360px',
+    minWidth: '280px',
+    maxWidth: '360px',
+    width: 'calc(100vw - 100px)',
     maxHeight: '500px',
     overflowY: 'auto',
     zIndex: 1000,
@@ -494,8 +501,8 @@ const styles = {
   modal: {
     background: '#1a1a1a',
     borderRadius: '12px',
-    minWidth: '500px',
-    maxWidth: '90%',
+    width: '90%',
+    maxWidth: '500px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
     border: '1px solid #2d2d2d'
   },

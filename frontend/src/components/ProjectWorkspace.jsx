@@ -41,6 +41,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [streamingText, setStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const streamingTextRef = useRef('');
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   
   const endRef = useRef(null);
   const textareaRef = useRef(null);
@@ -63,6 +64,35 @@ export default function ProjectWorkspace({ project, onBack }) {
       }
     }
   }, [discussions]);
+
+  const handleSourceClick = (discussionId, messageId) => {
+    if (discussionId && (!currentDiscussion || currentDiscussion._id !== discussionId)) {
+      const discussion = discussions.find(d => d._id === discussionId);
+      if (discussion) {
+        switchDiscussion(discussion);
+      }
+    }
+    setHighlightedMessageId(messageId);
+    setShowDashboard(false);
+  };
+
+  useEffect(() => {
+    if (highlightedMessageId && messages.length > 0) {
+      setTimeout(() => {
+        const msgElement = document.getElementById(`message-${highlightedMessageId}`);
+        if (msgElement) {
+          msgElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          msgElement.style.transition = 'background-color 0.5s ease';
+          const originalBg = msgElement.style.backgroundColor;
+          msgElement.style.backgroundColor = 'rgba(139, 92, 246, 0.2)';
+          setTimeout(() => {
+            msgElement.style.backgroundColor = originalBg;
+            setHighlightedMessageId(null);
+          }, 2000);
+        }
+      }, 100);
+    }
+  }, [highlightedMessageId, messages]);
 
   useEffect(() => {
     connectWebSocket();
@@ -96,12 +126,15 @@ export default function ProjectWorkspace({ project, onBack }) {
   }, [streamingText, isStreaming, aiThinking]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!highlightedMessageId) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // Scroll to bottom when returning to chat view
   useEffect(() => {
     if (!showDashboard && !showDocuments && !showSettings && !showSummaries && messages.length > 0) {
+      if (highlightedMessageId) return; // Prevent bottom-scroll if we are navigating to a specific message
       setTimeout(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -189,6 +222,18 @@ export default function ProjectWorkspace({ project, onBack }) {
       
       if (data.type === 'discussion-joined') {
         setMessages(data.messages);
+        
+        // Initialize saved messages state
+        const savedIds = new Set();
+        data.messages.forEach(m => {
+          if (m.isSaved) savedIds.add(m._id);
+        });
+        setSavedMessageIds(prev => {
+          const next = new Set(prev);
+          savedIds.forEach(id => next.add(id));
+          return next;
+        });
+        
         setIsLoadingMessages(false);
       } else if (data.type === 'project-chat') {
         setMessages(prev => prev.some(m => m._id && m._id === data.message._id) ? prev : [...prev, data.message]);
@@ -218,6 +263,8 @@ export default function ProjectWorkspace({ project, onBack }) {
         setStreamingText('');
         streamingTextRef.current = '';
         setIsSendingMessage(false);
+      } else if (data.type === 'message-saved') {
+        setSavedMessageIds(prev => new Set(prev).add(data.messageId));
       } else if (data.type === 'error') {
         setIsSendingMessage(false);
         setAiThinking(false);
@@ -249,6 +296,11 @@ export default function ProjectWorkspace({ project, onBack }) {
     setCurrentDiscussion(discussion);
     setMessages([]);
     setIsLoadingMessages(true);
+    
+    // Auto-collapse sidebar on mobile screens
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
     
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -365,7 +417,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   }
 
   if (showDashboard) {
-    return <Dashboard project={project} onClose={() => setShowDashboard(false)} token={token} colors={colors} />;
+    return <Dashboard project={project} onClose={() => setShowDashboard(false)} token={token} colors={colors} onSourceClick={handleSourceClick} />;
   }
 
   if (showDocuments) {
@@ -558,9 +610,9 @@ export default function ProjectWorkspace({ project, onBack }) {
       </Sidebar>
 
       {/* Main */}
-      <div className="main-workspace" style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
+      <div className="main-workspace" style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px', minWidth: 0}}>
         {/* Header */}
-        <div style={{...styles.header, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+        <div className="workspace-header-responsive" style={{...styles.header, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
           <div style={styles.headerTitle}>
 
 
@@ -727,7 +779,7 @@ export default function ProjectWorkspace({ project, onBack }) {
 
         <div style={{...styles.inputArea, background: colors.surface, borderTop: `1px solid ${colors.border}`}}>
           {showMentions && (
-            <div ref={mentionRef} style={{...styles.mentionBox, background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)'}}>
+            <div ref={mentionRef} className="mention-box-responsive" style={{...styles.mentionBox, background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)'}}>
               {getMentionOptions().map((option, i) => (
                 <div
                   key={i}
@@ -894,7 +946,7 @@ function MessageBubble({ message, currentUser, colors, onAddToMemory, isSaving, 
   const timeStr = message.time ? new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   
   return (
-    <div className={`msg-bubble-row ${isAI ? 'ai-message-row' : ''}`} style={{
+    <div id={`message-${message._id}`} className={`msg-bubble-row ${isAI ? 'ai-message-row' : ''}`} style={{
       padding: '16px 0',
       width: '100%',
       background: isAI ? colors.surface : 'transparent',
@@ -975,7 +1027,9 @@ function MessageBubble({ message, currentUser, colors, onAddToMemory, isSaving, 
             }}
             title={isSaved ? 'Saved to Project Memory' : 'Save to Project Memory'}
           >
-            {isSaved ? '✓ Saved' : isSaving ? '...' : '+ Memory'}
+            {isSaved ? '✓ Saved' : isSaving ? '...' : (
+              <>+<span className="memory-btn-text"> Memory</span></>
+            )}
           </button>
         )}
       </div>
@@ -1384,7 +1438,7 @@ function Documents({ project, onClose, token, colors }) {
 
   return (
     <div style={{...styles.fullPage, background: colors.background}}>
-      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+      <div className="page-header-responsive" style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
         <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -1408,7 +1462,7 @@ function Documents({ project, onClose, token, colors }) {
         />
       </div>
 
-      <div style={styles.pageContent}>
+      <div className="page-content-responsive" style={styles.pageContent}>
         {documents.length === 0 ? (
           <div style={styles.emptyState}>
             <p style={{...styles.emptyText, color: colors.textSecondary}}>No documents uploaded yet</p>
@@ -1501,7 +1555,7 @@ function Settings({ project, onClose, token, isOwner, colors }) {
 
   return (
     <div style={styles.settingsOverlay}>
-      <div style={{...styles.settingsModal, background: colors.surface, border: `1px solid ${colors.border}`}}>
+      <div className="settings-modal-responsive" style={{...styles.settingsModal, background: colors.surface, border: `1px solid ${colors.border}`}}>
         <div style={{...styles.settingsHeader, borderBottom: `1px solid ${colors.border}`}}>
           <h2 style={{...styles.settingsTitle, color: colors.text}}>Project Settings</h2>
           <button onClick={onClose} style={{...styles.settingsClose, color: colors.textSecondary}}>
@@ -1524,7 +1578,7 @@ function Settings({ project, onClose, token, isOwner, colors }) {
             <h3 style={{...styles.sectionTitle, color: colors.text}}>Invite Link</h3>
             <p style={{...styles.sectionDesc, color: colors.textSecondary}}>Share this link with team members</p>
             <div style={styles.codeBox}>
-              <code style={{...styles.code, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}>{`${window.location.origin}/join/${project.inviteCode}`}</code>
+              <code style={{...styles.code, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text, wordBreak: 'break-all', fontSize: '13px'}}>{`${window.location.origin}/join/${project.inviteCode}`}</code>
               <button onClick={copyInviteCode} style={styles.copyBtn}>
                 {copied ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1542,7 +1596,7 @@ function Settings({ project, onClose, token, isOwner, colors }) {
               <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
                 Or send invitation via email:
               </p>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input
                   type="email"
                   placeholder="teammate@example.com"
@@ -1725,7 +1779,7 @@ function Summaries({ project, discussion, onClose, token, colors }) {
 
   return (
     <div style={{...styles.fullPage, background: colors.background}}>
-      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+      <div className="page-header-responsive" style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
         <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -1745,7 +1799,7 @@ function Summaries({ project, discussion, onClose, token, colors }) {
         </button>
       </div>
 
-      <div style={styles.pageContent}>
+      <div className="page-content-responsive" style={styles.pageContent}>
         {loading ? (
           <div style={styles.emptyState}>
             <p style={{...styles.emptyText, color: colors.textSecondary}}>Loading summaries...</p>
@@ -1880,7 +1934,7 @@ function AllDiscussionSummaries({ project, discussions, onClose, token, colors }
 
   return (
     <div style={{...styles.fullPage, background: colors.background}}>
-      <div style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
+      <div className="page-header-responsive" style={{...styles.pageHeader, background: colors.surface, borderBottom: `1px solid ${colors.border}`}}>
         <button onClick={onClose} style={{...styles.backButton, border: `1px solid ${colors.border}`, color: colors.text}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -1891,7 +1945,7 @@ function AllDiscussionSummaries({ project, discussions, onClose, token, colors }
         <div style={{ width: '100px' }} />
       </div>
 
-      <div style={styles.pageContent}>
+      <div className="page-content-responsive" style={styles.pageContent}>
         {loading ? (
           <div style={styles.emptyState}>
             <p style={{color: colors.textSecondary}}>Loading...</p>
@@ -1962,7 +2016,9 @@ const styles = {
   container: {
     display: 'flex',
     height: '100vh',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    overflow: 'hidden',
+    width: '100%'
   },
   iconBar: {
     position: 'fixed',
@@ -2146,14 +2202,21 @@ const styles = {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
-    marginLeft: '16px'
+    gap: '12px',
+    marginLeft: '8px',
+    minWidth: 0,
+    flexWrap: 'wrap',
+    position: 'relative'
   },
   title: {
     fontSize: '16px',
     fontWeight: '600',
     color: '#ececec',
-    margin: 0
+    margin: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0
   },
   headerActions: {
     position: 'relative'
@@ -2424,7 +2487,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    padding: '20px'
+    padding: '16px'
   },
   settingsModal: {
     background: '#1a1a1a',
@@ -2477,7 +2540,9 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     padding: '12px 0',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    flexWrap: 'wrap',
+    gap: '4px'
   },
   infoLabel: {
     fontSize: '14px',
@@ -2491,7 +2556,8 @@ const styles = {
   codeBox: {
     display: 'flex',
     gap: '12px',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexWrap: 'wrap'
   },
   code: {
     flex: 1,
@@ -2565,13 +2631,14 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2000
+    zIndex: 2000,
+    padding: '16px'
   },
   modal: {
     background: '#1a1a1a',
     borderRadius: '12px',
-    minWidth: '500px',
-    maxWidth: '90%',
+    width: '90%',
+    maxWidth: '500px',
     border: '1px solid #2d2d2d'
   },
   modalHeader: {
@@ -2639,10 +2706,11 @@ const styles = {
     fontWeight: '600'
   },
   fullPage: {
-    width: '100vw',
+    width: '100%',
     height: '100vh',
     background: '#0d0d0d',
-    overflowY: 'auto'
+    overflowY: 'auto',
+    overflowX: 'hidden'
   },
   pageHeader: {
     display: 'flex',
@@ -2650,7 +2718,8 @@ const styles = {
     gap: '16px',
     padding: '16px 24px',
     borderBottom: '1px solid #2d2d2d',
-    background: '#171717'
+    background: '#171717',
+    flexWrap: 'wrap'
   },
   backButton: {
     display: 'flex',
@@ -2670,7 +2739,11 @@ const styles = {
     fontSize: '24px',
     fontWeight: '600',
     color: '#ececec',
-    margin: 0
+    margin: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0
   },
   refreshButton: {
     padding: '8px',
@@ -3089,7 +3162,9 @@ const styles = {
     alignItems: 'center',
     marginBottom: '16px',
     paddingBottom: '12px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    flexWrap: 'wrap',
+    gap: '8px'
   },
   summaryMeta: {
     display: 'flex',
@@ -3186,7 +3261,9 @@ const styles = {
     justifyContent: 'space-between',
     padding: '24px 32px',
     borderBottom: '1px solid rgba(255,255,255,0.1)',
-    background: '#16171f'
+    background: '#16171f',
+    flexWrap: 'wrap',
+    gap: '12px'
   },
   dashboardHeaderLeft: {
     display: 'flex',
@@ -3482,7 +3559,7 @@ const styles = {
   },
   stageSelector: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
     gap: '8px'
   },
   stageOption: {
@@ -3668,7 +3745,7 @@ const styles = {
   // New Dashboard Redesign Styles
   healthBar: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(5, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
     gap: '1px',
     background: '#2d2d2d',
     borderRadius: '8px',
@@ -3710,7 +3787,7 @@ const styles = {
   },
   topicBarRow: {
     display: 'grid',
-    gridTemplateColumns: '140px 1fr 40px',
+    gridTemplateColumns: 'minmax(80px, 140px) 1fr 40px',
     alignItems: 'center',
     gap: '12px'
   },

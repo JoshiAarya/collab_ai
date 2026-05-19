@@ -97,7 +97,7 @@ export default function ProjectList({ onSelectProject }) {
       </Sidebar>
 
       {/* Main content */}
-      <div style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px'}}>
+      <div className="main-workspace" style={{...styles.main, marginLeft: sidebarOpen ? '308px' : '48px', minWidth: 0}}>
 
         <div style={styles.emptyState}>
           <div style={{...styles.emptyIcon, color: colors.textTertiary}}>
@@ -329,7 +329,7 @@ function CreateProjectModal({ token, colors, onClose, onCreated }) {
                   <p style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '12px' }}>
                     Or send invitation via email:
                   </p>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <input
                       type="email"
                       placeholder="teammate@example.com"
@@ -710,7 +710,8 @@ const styles = {
   emptyTitle: {
     fontSize: '32px',
     fontWeight: '600',
-    marginBottom: '16px'
+    marginBottom: '16px',
+    wordBreak: 'break-word'
   },
   emptyText: {
     fontSize: '16px',
@@ -720,7 +721,8 @@ const styles = {
   emptyActions: {
     display: 'flex',
     gap: '12px',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    flexWrap: 'wrap'
   },
   primaryBtn: {
     padding: '12px 24px',

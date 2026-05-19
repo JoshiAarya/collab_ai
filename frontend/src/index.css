@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -91,6 +96,8 @@ textarea:focus-visible {
 .markdown-content {
   line-height: 1.7;
   color: inherit;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .markdown-content p {
@@ -112,6 +119,7 @@ textarea:focus-visible {
   overflow-x: auto;
   margin: 1em 0;
   border: 1px solid var(--border-color, #2d2d2d);
+  max-width: 100%;
 }
 
 .markdown-content pre code {
@@ -155,6 +163,9 @@ textarea:focus-visible {
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .markdown-content th,
@@ -305,31 +316,311 @@ textarea:focus-visible {
 .chat-messages::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
+}
+
 .chat-messages::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Mobile Responsive Layout */
+/* ============================
+   RESPONSIVE: TABLET (≤ 1024px)
+   ============================ */
+@media (max-width: 1024px) {
+  /* Settings page health bar grid */
+  .health-bar-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  
+  /* Dashboard content padding */
+  .dashboard-content {
+    padding: 24px !important;
+  }
+
+  /* Stats row in settings */
+  .stats-row-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ============================
+   RESPONSIVE: SMALL TABLET & LARGE PHONE (≤ 768px)
+   ============================ */
 @media (max-width: 768px) {
+  /* Sidebar overlay behavior */
   .sidebar-container {
     z-index: 2000 !important;
     box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5) !important;
+    width: 260px !important;
   }
+
+  /* Main workspace - only offset by icon bar */
   .main-workspace {
     margin-left: 48px !important;
   }
+
+  /* Show sidebar backdrop on mobile */
+  .sidebar-backdrop {
+    display: block !important;
+  }
+
+  /* Dashboard header */
   .dashboard-header {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 16px;
+    gap: 12px;
+    padding: 16px !important;
   }
+
+  /* Dashboard content */
   .dashboard-content {
     padding: 16px !important;
   }
+
+  /* Decision grid -> single column */
   .decision-grid {
     grid-template-columns: 1fr !important;
   }
+
+  /* Messages container */
   .messages-container {
+    padding: 12px !important;
+  }
+
+  /* Settings page health bar */
+  .health-bar-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Stats grids -> 2 columns */
+  .stats-row-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Profile stats grid */
+  .profile-stats-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Topic bar rows */
+  .topic-bar-row {
+    grid-template-columns: 100px 1fr 30px !important;
+  }
+
+  /* Stage selector */
+  .stage-selector-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Full page headers */
+  .page-header-responsive {
+    padding: 12px 16px !important;
+    gap: 12px !important;
+  }
+
+  /* Page content areas */
+  .page-content-responsive {
     padding: 16px !important;
+  }
+
+  /* Memory button always visible on touch */
+  .memory-btn {
+    opacity: 1 !important;
+  }
+
+  .memory-btn-text {
+    display: none;
+  }
+}
+
+/* ============================
+   RESPONSIVE: PHONE (≤ 480px)
+   ============================ */
+@media (max-width: 480px) {
+  /* Sidebar overlay behavior - hide when closed */
+  .sidebar-container {
+    width: 100vw !important;
+    left: 0 !important;
+  }
+
+  /* Icon bar */
+  .icon-bar-container {
+    width: 44px !important;
+  }
+
+  /* Main workspace - offset by smaller icon bar */
+  .main-workspace {
+    margin-left: 44px !important;
+  }
+
+  /* Auth card */
+  .auth-card {
+    padding: 32px 20px !important;
+  }
+
+  /* Dashboard header fully stacked */
+  .dashboard-header {
+    padding: 12px !important;
+  }
+
+  /* Dashboard content minimal padding */
+  .dashboard-content {
+    padding: 12px !important;
+  }
+
+  /* Workspace header */
+  .workspace-header-responsive {
+    padding: 8px 12px !important;
+  }
+
+  /* Chat input area */
+  .chat-input-wrapper {
+    margin: 0 8px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Message row padding */
+  .msg-bubble-row {
+    padding: 12px 0 !important;
+  }
+
+  /* Message inner content */
+  .msg-bubble-row > div {
+    padding: 0 12px !important;
+  }
+
+  /* Onboarding modal */
+  .onboarding-modal-responsive {
+    padding: 40px 20px 24px !important;
+  }
+
+  /* Settings page health bar -> single column */
+  .health-bar-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stats grids -> single column */
+  .stats-row-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Profile stats grid -> single row scroll */
+  .profile-stats-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* Decision cards */
+  .decision-grid {
+    gap: 12px !important;
+  }
+
+  /* All page titles */
+  .page-title-responsive {
+    font-size: 18px !important;
+  }
+
+  /* Topic bar rows simplified */
+  .topic-bar-row {
+    grid-template-columns: 80px 1fr 30px !important;
+    gap: 8px !important;
+  }
+
+  /* Pagination */
+  .pagination-responsive {
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  /* Page header */
+  .page-header-responsive {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  /* Page content */
+  .page-content-responsive {
+    padding: 12px !important;
+  }
+
+  /* Settings modal */
+  .settings-modal-responsive {
+    max-width: 100% !important;
+    max-height: calc(100vh - 32px) !important;
+    border-radius: 12px !important;
+    width: 100% !important;
+  }
+
+  /* Modal overlay - ensure modals are full screen on phone */
+  .modal-responsive {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: 100vh !important;
+    border-radius: 12px !important;
+    margin: 8px !important;
+  }
+
+  /* Invite modal */
+  .invite-modal-responsive {
+    width: calc(100% - 16px) !important;
+    max-width: 100% !important;
+  }
+
+  /* Model selector dropdown */
+  .model-dropdown-responsive {
+    min-width: auto !important;
+    width: calc(100vw - 100px) !important;
+    max-width: 360px !important;
+  }
+
+  /* Chat empty state */
+  .chat-empty-responsive h2 {
+    font-size: 18px !important;
+  }
+
+  /* Summary cards */
+  .summary-card-responsive {
+    padding: 14px !important;
+  }
+
+  /* Member items */
+  .member-item-responsive {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Document cards */
+  .document-card-responsive {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  /* Mention box */
+  .mention-box-responsive {
+    width: calc(100% - 24px) !important;
+    left: 12px !important;
+    transform: none !important;
+  }
+}
+
+/* ============================
+   RESPONSIVE: VERY SMALL PHONE (≤ 360px)
+   ============================ */
+@media (max-width: 360px) {
+  .profile-stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .profile-stats-grid > *:last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Further reduce padding */
+  .dashboard-content {
+    padding: 8px !important;
+  }
+
+  .page-content-responsive {
+    padding: 8px !important;
   }
 }

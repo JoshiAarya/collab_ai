@@ -1,9 +1,21 @@
 import Summary from '../models/Summary.js';
 
+import Message from '../models/Message.js';
+
 class SummaryService {
   // Create summary
   async createSummary(projectId, discussionId, content, type = 'discussion', generatedBy = 'server', messageCountAtSummary = 0) {
     try {
+      let start = new Date();
+      let end = new Date();
+
+      const firstMsg = await Message.findOne({ discussionId }).sort({ timestamp: 1 }).select('timestamp').lean();
+      const lastMsg = await Message.findOne({ discussionId }).sort({ timestamp: -1 }).select('timestamp').lean();
+      if (firstMsg && lastMsg) {
+        start = firstMsg.timestamp;
+        end = lastMsg.timestamp;
+      }
+
       const summary = new Summary({
         projectId,
         discussionId,
@@ -11,10 +23,7 @@ class SummaryService {
         type,
         generatedBy,
         messageCountAtSummary,
-        messageRange: {
-          start: new Date(),
-          end: new Date()
-        }
+        messageRange: { start, end }
       });
 
       await summary.save();

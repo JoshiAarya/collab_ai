@@ -37,7 +37,7 @@ export default function Auth() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.card}>
+      <div className="auth-card" style={styles.card}>
         <div style={styles.logo}>
           <div style={{
             width: '56px',

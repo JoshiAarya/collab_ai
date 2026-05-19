@@ -140,7 +140,7 @@ export default function ProfileModal({ onClose }) {
 
           {/* Stats */}
           {stats && (
-            <div style={styles.statsGrid}>
+            <div className="profile-stats-grid" style={styles.statsGrid}>
               <div style={styles.statCard}>
                 <div style={styles.statValue}>{stats.projectCount}</div>
                 <div style={styles.statLabel}>Projects</div>
@@ -346,7 +346,9 @@ const getStyles = (colors) => ({
     flexShrink: 0
   },
   avatarInfo: {
-    flex: 1
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden'
   },
   avatarName: {
     fontSize: '18px',
