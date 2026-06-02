@@ -1,647 +1,543 @@
-import React, { useEffect, useState, useRef } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
+import React, { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import Auth from './components/Auth';
+import ProjectList from './components/ProjectList';
+import ProjectWorkspace from './components/ProjectWorkspace';
+import Onboarding from './components/Onboarding';
+import ErrorBoundary from './components/shared/ErrorBoundary';
+import apiRequest from './utils/api.js';
+import { getInviteCodeFromUrl, getDiscussionInviteFromUrl, clearUrl } from './utils/router';
 
-export default function App() {
-  const [socket, setSocket] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [rooms, setRooms] = useState([]);
-  const [currentRoom, setCurrentRoom] = useState('general');
-  const [input, setInput] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [username, setUsername] = useState('');
-  const [showUsernameModal, setShowUsernameModal] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const endRef = useRef(null);
+function AppContent() {
+  const { user, loading, refreshAuth, token } = useAuth();
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [inviteCode, setInviteCode] = useState(null);
+  const [discussionId, setDiscussionId] = useState(null);
+  const [isJoining, setIsJoining] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteProjectData, setInviteProjectData] = useState(null);
+  const [oauthHandled, setOauthHandled] = useState(false);
 
-  // Initialize username from localStorage or show modal
+  // Check for invite link in URL
   useEffect(() => {
-    const savedUsername = localStorage.getItem('collab-ai-username');
-    if (savedUsername) {
-      setUsername(savedUsername);
-    } else {
-      setShowUsernameModal(true);
+    const code = getInviteCodeFromUrl();
+    const discussion = getDiscussionInviteFromUrl();
+    if (code) {
+      setInviteCode(code);
+      if (discussion) {
+        setDiscussionId(discussion);
+      }
     }
   }, []);
 
-  // connect websocket
+  // Auto-join project if user is logged in and has invite code
   useEffect(() => {
-    if (!username) return; // Don't connect until username is set
-    
-    const ws = new WebSocket("ws://localhost:8080");
-    ws.onopen = () => console.log("✅ Connected to server");
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === "init") {
-        setMessages(data.messages);
-        setCurrentRoom(data.currentRoom || 'general');
-      }
-      else if (data.type === "rooms") setRooms(data.rooms);
-      else if (data.type === "room-switched") {
-        setMessages(data.messages);
-        setCurrentRoom(data.currentRoom);
-      }
-      else if (data.type === "chat") setMessages((m) => [...m, data.message]);
-    };
-    setSocket(ws);
-    return () => ws.close();
-  }, [username]);
+    if (user && inviteCode && token && !isJoining && !showInviteModal) {
+      // Fetch project info first to show in modal
+      fetchInviteProjectInfo();
+    }
+  }, [user, inviteCode, token]);
 
-  // Fetch online users periodically
-  useEffect(() => {
-    if (!username) return;
-    
-    const fetchOnlineUsers = async () => {
-      try {
-        const response = await fetch('http://localhost:8080/api/users/online');
-        const data = await response.json();
-        if (data.success) {
-          setOnlineUsers(data.users);
-        }
-      } catch (error) {
-        console.error('Error fetching online users:', error);
-      }
-    };
-
-    fetchOnlineUsers();
-    const interval = setInterval(fetchOnlineUsers, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
-  }, [username]);
-
-  // auto-scroll
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const sendMessage = () => {
-    if (!input.trim() || !socket || socket.readyState !== WebSocket.OPEN || !username) return;
-    socket.send(JSON.stringify({ type: "chat", user: username, text: input }));
-    setInput("");
-  };
-
-  const saveUsername = (newUsername) => {
-    const trimmedUsername = newUsername.trim();
-    if (trimmedUsername) {
-      setUsername(trimmedUsername);
-      localStorage.setItem('collab-ai-username', trimmedUsername);
-      setShowUsernameModal(false);
+  const fetchInviteProjectInfo = async () => {
+    try {
+      // We need to get project info without joining first
+      // For now, just show the modal - we'll fetch details in the modal
+      setShowInviteModal(true);
+    } catch (error) {
+      console.error('Error fetching invite info:', error);
+      // If we can't fetch, just show modal anyway
+      setShowInviteModal(true);
     }
   };
 
-  const changeUsername = () => {
-    setShowUsernameModal(true);
-  };
-
-  const joinRoom = (roomId) => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ type: "join-room", roomId }));
-  };
-
-  const createRoom = async (name, description = '') => {
+  const handleAutoJoin = async () => {
+    // Prevent multiple calls
+    if (isJoining) return;
+    
+    setIsJoining(true);
+    
     try {
-      const response = await fetch('http://localhost:8080/api/rooms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, createdBy: username })
-      });
+      const requestBody = { inviteCode };
       
-      if (response.ok) {
-        // Refresh rooms list
-        const roomsResponse = await fetch('http://localhost:8080/api/rooms');
-        const roomsData = await roomsResponse.json();
-        if (roomsData.success) {
-          setRooms(roomsData.rooms);
+      // If there's a discussion ID, include it in the request
+      if (discussionId) {
+        requestBody.discussionId = discussionId;
+      }
+      
+      const response = await apiRequest('/api/projects/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        clearUrl();
+        setInviteCode(null);
+        setShowInviteModal(false);
+        
+        // Show appropriate success message
+        if (discussionId) {
+          if (data.alreadyMember && data.addedToDiscussion) {
+            toast.success(`Added to discussion in "${data.project.title}"!`);
+          } else if (data.alreadyMember) {
+            toast.success(`Opened "${data.project.title}"`);
+          } else {
+            toast.success(`Joined "${data.project.title}" and added to discussion!`);
+          }
+          
+          // Store discussion ID for navigation
+          sessionStorage.setItem('pendingDiscussionId', data.discussionId || discussionId);
+          setDiscussionId(null);
+          
+          // For discussion invites, open the project workspace directly
+          setSelectedProject(data.project);
+        } else {
+          // Project invite - stay on project list
+          if (data.alreadyMember) {
+            toast.info(`You're already a member of "${data.project.title}"`);
+          } else {
+            toast.success(`Joined "${data.project.title}" successfully!`);
+          }
         }
+      } else {
+        toast.error(data.error || 'Failed to join project');
+        clearUrl();
+        setInviteCode(null);
+        setDiscussionId(null);
+        setShowInviteModal(false);
       }
     } catch (error) {
-      console.error('Error creating room:', error);
+      toast.error('Failed to join project');
+      clearUrl();
+      setInviteCode(null);
+      setDiscussionId(null);
+      setShowInviteModal(false);
+    } finally {
+      setIsJoining(false);
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+  const handleDeclineInvite = () => {
+    clearUrl();
+    setInviteCode(null);
+    setDiscussionId(null);
+    setShowInviteModal(false);
+    toast.info('Invite declined');
   };
 
-  const insertCollabAI = () => {
-    if (!input.startsWith("@CollabAI ")) {
-      setInput("@CollabAI ");
+  // Check if user needs onboarding
+  useEffect(() => {
+    if (user && !localStorage.getItem('onboarding-completed') && !inviteCode) {
+      console.log('Showing onboarding for new user');
+      setShowOnboarding(true);
     }
-  };
+  }, [user, inviteCode]);
 
-  // Don't render main app until username is set
-  if (showUsernameModal) {
-    return <UsernameModal onSave={saveUsername} />;
+  // Handle OAuth callback
+  useEffect(() => {
+    if (oauthHandled) return;
+    
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const provider = params.get('provider');
+    const error = params.get('error');
+
+    if (error) {
+      toast.error('Authentication failed. Please try again.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setOauthHandled(true);
+    } else if (token && provider) {
+      // Store token
+      localStorage.setItem('collab-ai-token', token);
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setOauthHandled(true);
+      // Trigger auth refresh
+      refreshAuth().then(() => {
+        toast.success(`Welcome! Signed in with ${provider}`);
+      });
+    }
+  }, [toast, oauthHandled, refreshAuth]);
+
+  if (loading) {
+    return (
+      <div style={styles.loading}>
+        <div style={styles.loadingSpinner}></div>
+        <div style={styles.loadingText}>Loading...</div>
+      </div>
+    );
+  }
+
+  // If not logged in but has invite code, show login with message
+  if (!user) {
+    if (inviteCode) {
+      return (
+        <div>
+          <div style={{
+            background: '#1a1a1a',
+            border: '1px solid #2d2d2d',
+            borderRadius: '8px',
+            padding: '16px',
+            margin: '20px auto',
+            maxWidth: '420px',
+            textAlign: 'center'
+          }}>
+            <p style={{ color: '#10a37f', fontSize: '14px', marginBottom: '8px' }}>
+              🎉 You've been invited to join a project!
+            </p>
+            <p style={{ color: '#b4b4b4', fontSize: '13px' }}>
+              Please log in or create an account to continue
+            </p>
+          </div>
+          <Auth />
+        </div>
+      );
+    }
+    return <Auth />;
+  }
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={() => setShowOnboarding(false)} />;
+  }
+
+  if (selectedProject) {
+    return (
+      <>
+        <ProjectWorkspace 
+          project={selectedProject} 
+          onBack={() => setSelectedProject(null)} 
+        />
+        {showInviteModal && (
+          <InviteConfirmModal
+            inviteCode={inviteCode}
+            discussionId={discussionId}
+            token={token}
+            onAccept={handleAutoJoin}
+            onDecline={handleDeclineInvite}
+            isJoining={isJoining}
+          />
+        )}
+      </>
+    );
   }
 
   return (
-    <div style={styles.container}>
-      {/* Sidebar */}
-      <div style={{...styles.sidebar, width: sidebarOpen ? 250 : 0}}>
-        <div style={styles.sidebarHeader}>
-          <h3>Rooms</h3>
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            style={styles.toggleBtn}
-          >
-            {sidebarOpen ? '←' : '→'}
-          </button>
-        </div>
-        {sidebarOpen && (
-          <div style={styles.roomList}>
-            {rooms.map((room) => (
-              <div
-                key={room.name}
-                onClick={() => joinRoom(room.name)}
-                style={{
-                  ...styles.roomItem,
-                  backgroundColor: currentRoom === room.name ? '#238636' : 'transparent'
-                }}
-              >
-                <div style={styles.roomName}>#{room.name}</div>
-                <div style={styles.roomDesc}>{room.description}</div>
-                {room.messageCount > 0 && (
-                  <div style={styles.messageCount}>{room.messageCount}</div>
-                )}
-              </div>
-            ))}
-            
-            <button 
-              onClick={() => {
-                const name = prompt('Room name:');
-                const desc = prompt('Description (optional):');
-                if (name) createRoom(name, desc);
-              }}
-              style={styles.createRoomBtn}
-            >
-              + Create Room
-            </button>
-
-            {/* Online Users Section */}
-            <div style={styles.onlineSection}>
-              <h4 style={styles.sectionTitle}>Online Users ({onlineUsers.length})</h4>
-              <div style={styles.usersList}>
-                {onlineUsers.slice(0, 10).map((user) => (
-                  <div key={user.username} style={styles.onlineUser}>
-                    <span style={styles.onlineIndicator}>●</span>
-                    {user.username}
-                  </div>
-                ))}
-                {onlineUsers.length > 10 && (
-                  <div style={styles.moreUsers}>
-                    +{onlineUsers.length - 10} more
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Toggle button when sidebar is closed */}
-      {!sidebarOpen && (
-        <button 
-          onClick={() => setSidebarOpen(true)}
-          style={styles.sidebarToggle}
-        >
-          →
-        </button>
+    <>
+      <ProjectList onSelectProject={setSelectedProject} />
+      {showInviteModal && (
+        <InviteConfirmModal
+          inviteCode={inviteCode}
+          discussionId={discussionId}
+          token={token}
+          onAccept={handleAutoJoin}
+          onDecline={handleDeclineInvite}
+          isJoining={isJoining}
+        />
       )}
-
-      {/* Main Chat */}
-      <div style={{...styles.chatWindow, marginLeft: sidebarOpen ? 250 : 0}}>
-        <div style={styles.header}>
-          <div>
-            <h2>#{currentRoom}</h2>
-            <small onClick={changeUsername} style={styles.usernameBtn}>
-              {username} (click to change)
-            </small>
-          </div>
-        </div>
-        <div style={styles.messages}>
-          {messages.map((m, i) => (
-            <MessageBubble key={i} message={m} isAI={m.user === "CollabAI 🤖"} />
-          ))}
-          <div ref={endRef}></div>
-        </div>
-
-        <div style={styles.inputBox}>
-          <div style={styles.inputContainer}>
-            {input.startsWith("@CollabAI") && (
-              <span style={styles.mentionTag}>@CollabAI</span>
-            )}
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={`Message #${currentRoom}...`}
-              style={{
-                ...styles.textarea,
-                paddingLeft: input.startsWith("@CollabAI") ? 95 : 12,
-              }}
-              rows={2}
-            />
-          </div>
-
-          <button onClick={insertCollabAI} style={styles.mentionBtn}>
-            ⚡ CollabAI
-          </button>
-          <button onClick={sendMessage} style={styles.sendBtn}>
-            ➤
-          </button>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
-function UsernameModal({ onSave }) {
-  const [inputUsername, setInputUsername] = useState('');
+function InviteConfirmModal({ inviteCode, discussionId, token, onAccept, onDecline, isJoining }) {
+  const [inviteInfo, setInviteInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (inputUsername.trim()) {
-      onSave(inputUsername.trim());
+  useEffect(() => {
+    fetchInviteInfo();
+  }, []);
+
+  const fetchInviteInfo = async () => {
+    try {
+      const response = await apiRequest('/api/projects/invite-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ inviteCode, discussionId })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setInviteInfo(data);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching invite info:', error);
+      setLoading(false);
     }
   };
 
-  const generateRandomUsername = () => {
-    const adjectives = ['Cool', 'Smart', 'Fast', 'Bright', 'Quick', 'Sharp', 'Bold', 'Swift'];
-    const nouns = ['Coder', 'Dev', 'User', 'Ninja', 'Pro', 'Ace', 'Star', 'Guru'];
-    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const noun = nouns[Math.floor(Math.random() * nouns.length)];
-    const num = Math.floor(Math.random() * 1000);
-    return `${adj}${noun}${num}`;
-  };
+  const isDiscussionInvite = !!discussionId;
+  const alreadyInProject = inviteInfo?.isMember;
+  const alreadyInDiscussion = inviteInfo?.discussion?.isParticipant;
 
   return (
     <div style={styles.modalOverlay}>
-      <div style={styles.modal}>
-        <h2>Welcome to CollabAI Chat! 🤖</h2>
-        <p>Choose your username to get started:</p>
-        
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <input
-            type="text"
-            value={inputUsername}
-            onChange={(e) => setInputUsername(e.target.value)}
-            placeholder="Enter your username..."
-            style={styles.usernameInput}
-            autoFocus
-            maxLength={20}
-          />
-          
-          <div style={styles.modalButtons}>
-            <button
-              type="button"
-              onClick={() => setInputUsername(generateRandomUsername())}
-              style={styles.randomBtn}
-            >
-              🎲 Random Name
-            </button>
-            
-            <button
-              type="submit"
-              disabled={!inputUsername.trim()}
-              style={{
-                ...styles.saveBtn,
-                opacity: inputUsername.trim() ? 1 : 0.5
-              }}
-            >
-              Start Chatting
-            </button>
+      <div style={styles.inviteModal}>
+        <div style={styles.inviteHeader}>
+          <div style={styles.inviteIcon}>
+            {isDiscussionInvite ? '💬' : '🎉'}
           </div>
-        </form>
-        
-        <small style={styles.modalNote}>
-          Your username will be saved locally and persist across sessions
-        </small>
+          <h2 style={styles.inviteTitle}>
+            {isDiscussionInvite ? 'Discussion Invite' : 'Project Invite'}
+          </h2>
+        </div>
+
+        <div style={styles.inviteBody}>
+          {loading ? (
+            <div style={styles.inviteLoading}>Loading invite details...</div>
+          ) : inviteInfo ? (
+            <>
+              <p style={styles.inviteText}>
+                {isDiscussionInvite 
+                  ? `You've been invited to join the discussion "${inviteInfo.discussion?.title || 'Discussion'}" in "${inviteInfo.project.title}".`
+                  : `You've been invited to join "${inviteInfo.project.title}".`}
+              </p>
+              
+              {isDiscussionInvite && (
+                <div style={styles.inviteNote}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                  </svg>
+                  <span>
+                    {alreadyInProject 
+                      ? (alreadyInDiscussion ? "You're already in this discussion" : "You'll be added to this discussion")
+                      : "You'll be added to the project and this discussion"}
+                  </span>
+                </div>
+              )}
+
+              <div style={styles.inviteDetails}>
+                <div style={styles.inviteDetailItem}>
+                  <span style={styles.inviteDetailLabel}>Project:</span>
+                  <div style={styles.inviteDetailValue}>{inviteInfo.project.title}</div>
+                </div>
+                {isDiscussionInvite && inviteInfo.discussion && (
+                  <div style={styles.inviteDetailItem}>
+                    <span style={styles.inviteDetailLabel}>Discussion:</span>
+                    <div style={styles.inviteDetailValue}>{inviteInfo.discussion.title}</div>
+                  </div>
+                )}
+                <div style={styles.inviteDetailItem}>
+                  <span style={styles.inviteDetailLabel}>Members:</span>
+                  <div style={styles.inviteDetailValue}>{inviteInfo.project.memberCount} members</div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={styles.inviteLoading}>Failed to load invite details</div>
+          )}
+        </div>
+
+        <div style={styles.inviteActions}>
+          <button
+            onClick={onDecline}
+            disabled={isJoining}
+            style={styles.inviteDeclineBtn}
+          >
+            Decline
+          </button>
+          <button
+            onClick={onAccept}
+            disabled={isJoining || loading || !inviteInfo}
+            style={styles.inviteAcceptBtn}
+          >
+            {isJoining ? 'Joining...' : (alreadyInProject && alreadyInDiscussion ? 'Continue' : 'Accept & Join')}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function MessageBubble({ message, isAI }) {
-  const safeHTML = DOMPurify.sanitize(marked.parse(message.text || ""));
+export default function App() {
   return (
-    <div
-      style={{
-        ...styles.bubble,
-        alignSelf: isAI ? "flex-start" : "flex-end",
-        background: isAI ? "#2d2f33" : "#005ce6",
-      }}
-    >
-      <div style={styles.user}>{message.user}</div>
-      <div
-        className="msg-content"
-        dangerouslySetInnerHTML={{ __html: safeHTML }}
-        style={styles.msgText}
-      ></div>
-      <div style={styles.time}>
-        {new Date(message.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      </div>
-    </div>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <AppContent />
+          <ToastContainer
+            position="top-right"
+            autoClose={4000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="dark"
+            style={{ zIndex: 99999 }}
+          />
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
 const styles = {
-  container: {
-    background: "#0d1117",
-    color: "#fff",
-    height: "100vh",
-    display: "flex",
-    fontFamily: "Inter, sans-serif",
-    position: "relative",
+  loading: {
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: '#0d0d0d',
+    color: '#ececec',
+    gap: '20px'
   },
-  sidebar: {
-    background: "#161b22",
-    borderRight: "1px solid #30363d",
-    height: "100vh",
-    position: "fixed",
-    left: 0,
-    top: 0,
-    zIndex: 1000,
-    transition: "width 0.3s ease",
-    overflow: "hidden",
+  loadingSpinner: {
+    width: '40px',
+    height: '40px',
+    border: '4px solid #2d2d2d',
+    borderTop: '4px solid #8b5cf6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
   },
-  sidebarHeader: {
-    padding: "15px 20px",
-    borderBottom: "1px solid #30363d",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    background: "#21262d",
-  },
-  toggleBtn: {
-    background: "none",
-    border: "none",
-    color: "#fff",
-    fontSize: 16,
-    cursor: "pointer",
-    padding: 5,
-  },
-  sidebarToggle: {
-    position: "fixed",
-    left: 10,
-    top: 20,
-    background: "#238636",
-    border: "none",
-    color: "#fff",
-    borderRadius: 6,
-    padding: "8px 12px",
-    cursor: "pointer",
-    zIndex: 1001,
-  },
-  roomList: {
-    padding: 10,
-  },
-  roomItem: {
-    padding: "12px 15px",
-    borderRadius: 8,
-    cursor: "pointer",
-    marginBottom: 5,
-    transition: "background 0.2s",
-    position: "relative",
-  },
-  roomName: {
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  roomDesc: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  messageCount: {
-    position: "absolute",
-    right: 10,
-    top: "50%",
-    transform: "translateY(-50%)",
-    background: "#238636",
-    borderRadius: 10,
-    padding: "2px 6px",
-    fontSize: 11,
-    minWidth: 18,
-    textAlign: "center",
-  },
-  createRoomBtn: {
-    width: "100%",
-    padding: "10px 15px",
-    background: "#238636",
-    border: "none",
-    color: "#fff",
-    borderRadius: 8,
-    cursor: "pointer",
-    marginTop: 10,
-    fontSize: 14,
-  },
-  chatWindow: {
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
-    height: "100vh",
-    background: "#161b22",
-    transition: "margin-left 0.3s ease",
-  },
-  header: {
-    padding: "15px 20px",
-    background: "#21262d",
-    borderBottom: "1px solid #30363d",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  messages: {
-    flex: 1,
-    overflowY: "auto",
-    padding: 20,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  inputBox: {
-    borderTop: "1px solid #30363d",
-    display: "flex",
-    alignItems: "center",
-    padding: 10,
-    background: "#0d1117",
-    gap: 8,
-  },
-  inputContainer: {
-    position: "relative",
-    flex: 1,
-  },
-  mentionTag: {
-    position: "absolute",
-    left: 12,
-    top: 10,
-    background: "#23863633",
-    color: "#00ff95",
-    padding: "4px 8px",
-    borderRadius: 6,
-    fontSize: 13,
-    pointerEvents: "none",
-  },
-  textarea: {
-    width: "100%",
-    resize: "none",
-    border: "none",
-    outline: "none",
-    padding: "10px 12px",
-    borderRadius: 10,
-    fontSize: "15px",
-    color: "#fff",
-    background: "#161b22",
-    minHeight: 44,
-  },
-  mentionBtn: {
-    background: "#23863622",
-    color: "#00ff95",
-    border: "1px solid #00ff95",
-    borderRadius: 8,
-    padding: "8px 12px",
-    fontSize: 14,
-    cursor: "pointer",
-    transition: "0.2s",
-  },
-  sendBtn: {
-    background: "#238636",
-    border: "none",
-    color: "#fff",
-    borderRadius: 8,
-    padding: "10px 16px",
-    fontSize: 18,
-    cursor: "pointer",
-  },
-  bubble: {
-    maxWidth: "75%",
-    padding: "10px 14px",
-    borderRadius: 10,
-    wordWrap: "break-word",
-    whiteSpace: "pre-wrap",
-    display: "flex",
-    flexDirection: "column",
-  },
-  user: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginBottom: 4,
-  },
-  msgText: {
-    fontSize: 15,
-    lineHeight: 1.4,
-  },
-  time: {
-    fontSize: 10,
-    opacity: 0.5,
-    textAlign: "right",
-    marginTop: 4,
-  },
-  usernameBtn: {
-    cursor: "pointer",
-    opacity: 0.8,
-    transition: "opacity 0.2s",
+  loadingText: {
+    fontSize: '16px',
+    color: '#6b7280'
   },
   modalOverlay: {
-    position: "fixed",
+    position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    background: "rgba(0, 0, 0, 0.8)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2000,
+    background: 'rgba(0, 0, 0, 0.85)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    backdropFilter: 'blur(4px)'
   },
-  modal: {
-    background: "#161b22",
-    border: "1px solid #30363d",
-    borderRadius: 12,
-    padding: 30,
-    maxWidth: 400,
-    width: "90%",
-    textAlign: "center",
-    color: "#fff",
+  inviteModal: {
+    background: '#1a1a1a',
+    border: '1px solid #2d2d2d',
+    borderRadius: '12px',
+    width: '90%',
+    maxWidth: '480px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+    animation: 'slideUp 0.3s ease-out'
   },
-  form: {
-    marginTop: 20,
+  inviteHeader: {
+    padding: '24px 24px 16px',
+    textAlign: 'center',
+    borderBottom: '1px solid #2d2d2d'
   },
-  usernameInput: {
-    width: "100%",
-    padding: "12px 16px",
-    borderRadius: 8,
-    border: "1px solid #30363d",
-    background: "#0d1117",
-    color: "#fff",
-    fontSize: 16,
-    marginBottom: 20,
-    outline: "none",
+  inviteIcon: {
+    fontSize: '48px',
+    marginBottom: '12px'
   },
-  modalButtons: {
-    display: "flex",
-    gap: 10,
-    justifyContent: "center",
+  inviteTitle: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#ececec',
+    margin: 0
   },
-  randomBtn: {
-    padding: "10px 16px",
-    background: "#21262d",
-    border: "1px solid #30363d",
-    color: "#fff",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 14,
+  inviteBody: {
+    padding: '24px'
   },
-  saveBtn: {
-    padding: "10px 20px",
-    background: "#238636",
-    border: "none",
-    color: "#fff",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: "bold",
+  inviteLoading: {
+    textAlign: 'center',
+    color: '#b4b4b4',
+    padding: '20px'
   },
-  modalNote: {
-    display: "block",
-    marginTop: 15,
-    opacity: 0.7,
-    fontSize: 12,
+  inviteText: {
+    fontSize: '15px',
+    color: '#b4b4b4',
+    lineHeight: '1.6',
+    margin: '0 0 20px 0',
+    textAlign: 'center'
   },
-  onlineSection: {
-    marginTop: 20,
-    paddingTop: 15,
-    borderTop: "1px solid #30363d",
+  inviteNote: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    background: 'rgba(139, 92, 246, 0.1)',
+    border: '1px solid rgba(139, 92, 246, 0.2)',
+    borderRadius: '8px',
+    fontSize: '13px',
+    color: '#b4b4b4',
+    marginBottom: '20px'
   },
-  sectionTitle: {
-    margin: "0 0 10px 0",
-    fontSize: 12,
-    opacity: 0.8,
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
+  inviteDetails: {
+    background: '#0d0d0d',
+    border: '1px solid #2d2d2d',
+    borderRadius: '8px',
+    padding: '16px'
   },
-  usersList: {
-    maxHeight: 150,
-    overflowY: "auto",
+  inviteDetailItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
   },
-  onlineUser: {
-    display: "flex",
-    alignItems: "center",
-    padding: "4px 8px",
-    fontSize: 13,
-    opacity: 0.9,
+  inviteDetailLabel: {
+    fontSize: '12px',
+    color: '#8e8ea0',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
   },
-  onlineIndicator: {
-    color: "#00ff95",
-    marginRight: 8,
-    fontSize: 8,
+  inviteDetailValue: {
+    fontSize: '14px',
+    color: '#ececec',
+    background: '#1a1a1a',
+    padding: '6px 10px',
+    borderRadius: '4px',
+    border: '1px solid #2d2d2d',
+    marginTop: '4px'
   },
-  moreUsers: {
-    padding: "4px 8px",
-    fontSize: 12,
-    opacity: 0.6,
-    fontStyle: "italic",
+  inviteActions: {
+    display: 'flex',
+    gap: '12px',
+    padding: '20px 24px',
+    borderTop: '1px solid #2d2d2d'
   },
+  inviteDeclineBtn: {
+    flex: 1,
+    padding: '12px 24px',
+    background: 'transparent',
+    border: '1px solid #2d2d2d',
+    borderRadius: '8px',
+    color: '#b4b4b4',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    ':hover': {
+      background: '#1a1a1a',
+      borderColor: '#3d3d3d'
+    }
+  },
+  inviteAcceptBtn: {
+    flex: 1,
+    padding: '12px 24px',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#ffffff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    ':hover': {
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)'
+    },
+    ':disabled': {
+      opacity: 0.5,
+      cursor: 'not-allowed'
+    }
+  }
 };
