@@ -93,18 +93,30 @@ class DiscussionService {
     }
   }
 
-  // Get discussion messages
-  async getDiscussionMessages(discussionId, limit = 100) {
+  // Get discussion messages (backward compatible: accepts a number or an options object)
+  async getDiscussionMessages(discussionId, options = 100) {
     try {
-      const messages = await Message.find({ discussionId })
+      const { limit = 100, before = null } =
+        typeof options === 'number' ? { limit: options } : (options || {});
+
+      const query = { discussionId };
+      if (before) {
+        query.timestamp = { $lt: new Date(before) };
+      }
+
+      // Fetch one extra to determine whether older messages remain
+      const fetched = await Message.find(query)
         .sort({ timestamp: -1 })  // Sort descending (newest first)
-        .limit(limit)
+        .limit(limit + 1)
         .lean();
+
+      const hasMore = fetched.length > limit;
+      const messages = hasMore ? fetched.slice(0, limit) : fetched;
 
       // Look up decisions to check if these messages are saved
       const Decision = (await import('../models/Decision.js')).default;
       const messageIds = messages.map(m => m._id);
-      
+
       const decisions = await Decision.find({
         $or: [
           { sourceMessageId: { $in: messageIds } },
@@ -117,13 +129,23 @@ class DiscussionService {
       );
 
       // Reverse to get chronological order (oldest to newest)
-      return messages.reverse().map(m => ({
+      const ordered = messages.reverse().map(m => ({
         ...m,
         isSaved: savedMessageIds.has(String(m._id))
       }));
+
+      // Backward compatible: number arg → return plain array.
+      // Options arg → return { messages, hasMore, nextCursor }.
+      if (typeof options === 'number') return ordered;
+
+      return {
+        messages: ordered,
+        hasMore,
+        nextCursor: ordered.length > 0 ? ordered[0].timestamp : null
+      };
     } catch (error) {
       console.error('Error getting discussion messages:', error);
-      return [];
+      return typeof options === 'number' ? [] : { messages: [], hasMore: false, nextCursor: null };
     }
   }
 

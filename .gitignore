@@ -1,0 +1,15 @@
+# Secrets / local env
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Claude Code local files
+.claude/
+
+# Dependencies
+node_modules/
+
+# OS / editor junk
+.DS_Store
+*.log

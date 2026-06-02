@@ -100,28 +100,37 @@ class AIOrchestrator {
       const { requestId, selectedModel, messages } = await this._prepareRequest(params);
       const apiKey = await this.getApiKey(selectedModel.provider, projectId);
 
-      // Streaming is only supported for Groq/server for now
       const provider = selectedModel.provider;
-      if (provider === 'groq' || provider === 'server') {
-        const fullText = await LLMGuardrails.guardedCall(
-          { requestId, provider: selectedModel.provider, model: selectedModel.model, messages, projectId },
-          async () => {
-            return await this.callGroqStreaming({
-              model: selectedModel.model, messages, maxTokens: 1024, apiKey
-            }, onChunk);
-          }
-        );
-        logger.ai('Streaming response complete', { requestId, provider, responseLength: fullText.length });
-        return fullText;
-      }
+      const model = selectedModel.model;
+      const maxTokens = 1024;
 
-      // Fallback: non-streaming for other providers
-      const response = await this.callProvider({
-        requestId, provider, model: selectedModel.model, context: null,
-        prompt: params.prompt, messagesOverride: messages, projectId, userId, maxTokens: 1024
-      });
-      onChunk(response); // send as single chunk
-      return response;
+      const fullText = await LLMGuardrails.guardedCall(
+        { requestId, provider, model, messages, projectId },
+        async () => {
+          switch (provider) {
+            case 'groq':
+            case 'server':
+              return await this.callGroqStreaming({ model, messages, maxTokens, apiKey }, onChunk);
+            case 'openai':
+              return await this.callOpenAIStreaming({ model, messages, maxTokens, apiKey }, onChunk);
+            case 'anthropic':
+              return await this.callAnthropicStreaming({ model, messages, maxTokens, apiKey }, onChunk);
+            case 'google':
+              return await this.callGoogleStreaming({ model, messages, maxTokens, apiKey }, onChunk);
+            default: {
+              // Fallback: non-streaming, send as a single chunk
+              const response = await this.callProvider({
+                requestId, provider, model, context: null,
+                prompt: params.prompt, messagesOverride: messages, projectId, userId, maxTokens
+              });
+              onChunk(response);
+              return response;
+            }
+          }
+        }
+      );
+      logger.ai('Streaming response complete', { requestId, provider, responseLength: fullText.length });
+      return fullText;
 
     } catch (error) {
       if (!(error instanceof RateLimitError)) {
@@ -376,6 +385,82 @@ Be conversational, concise, and natural. Use the project context below to give a
     let fullText = '';
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        onChunk(delta);
+      }
+    }
+    return fullText || 'No response generated.';
+  }
+
+  /**
+   * Streaming OpenAI call — yields chunks via onChunk callback
+   */
+  async callOpenAIStreaming({ model, messages, maxTokens, apiKey }, onChunk) {
+    const client = new OpenAI({ apiKey });
+    const stream = await client.chat.completions.create({
+      model, messages, max_tokens: maxTokens, temperature: 0.7, stream: true
+    });
+    let fullText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        onChunk(delta);
+      }
+    }
+    return fullText || 'No response generated.';
+  }
+
+  /**
+   * Streaming Anthropic call — yields chunks via onChunk callback
+   */
+  async callAnthropicStreaming({ model, messages, maxTokens, apiKey }, onChunk) {
+    const client = new Anthropic({ apiKey });
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = messages.filter(m => m.role !== 'system');
+    const stream = await client.messages.create({
+      model, max_tokens: maxTokens, temperature: 0.7,
+      system: systemMsg?.content || '',
+      messages: chatMessages,
+      stream: true
+    });
+    let fullText = '';
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        const delta = event.delta.text || '';
+        if (delta) {
+          fullText += delta;
+          onChunk(delta);
+        }
+      }
+    }
+    return fullText || 'No response generated.';
+  }
+
+  /**
+   * Streaming Google (Gemini) call — yields chunks via onChunk callback
+   */
+  async callGoogleStreaming({ model, messages, maxTokens, apiKey }, onChunk) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genAI.getGenerativeModel({
+      model, generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens }
+    });
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = messages.filter(m => m.role !== 'system');
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    const history = chatMessages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }]
+    }));
+    let userPrompt = lastMsg?.content || '';
+    if (systemMsg?.content && history.length === 0) {
+      userPrompt = `${systemMsg.content}\n\n${userPrompt}`;
+    }
+    const chat = geminiModel.startChat({ history });
+    const result = await chat.sendMessageStream(userPrompt);
+    let fullText = '';
+    for await (const chunk of result.stream) {
+      const delta = chunk.text() || '';
       if (delta) {
         fullText += delta;
         onChunk(delta);

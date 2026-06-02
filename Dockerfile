@@ -27,9 +27,13 @@ RUN npm ci
 
 COPY frontend/ ./
 
-# Build args for production URLs
+# Build args for frontend URLs (overridable via docker-compose `build.args`)
 ARG VITE_API_BASE_URL=https://collab-ai-j39n.onrender.com
 ARG VITE_WS_BASE_URL=wss://collab-ai-j39n.onrender.com
+
+# Promote to ENV so Vite (reads VITE_* from process.env) picks them up at build time
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_WS_BASE_URL=$VITE_WS_BASE_URL
 
 # Build frontend
 RUN npm run build

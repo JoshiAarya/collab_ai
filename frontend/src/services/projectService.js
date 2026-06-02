@@ -82,9 +82,11 @@ class ProjectService {
   /**
    * Get discussion messages
    */
-  async getMessages(projectId, discussionId, limit = 50) {
+  async getMessages(projectId, discussionId, { limit = 50, before = null } = {}) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (before) params.set('before', before);
     return await apiService.get(
-      `${config.api.discussions.messages(projectId, discussionId)}?limit=${limit}`
+      `${config.api.discussions.messages(projectId, discussionId)}?${params.toString()}`
     );
   }
 

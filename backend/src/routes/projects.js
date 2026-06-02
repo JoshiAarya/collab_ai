@@ -8,10 +8,19 @@ import aiService from '../services/aiService.js';
 import Decision from '../models/Decision.js';
 import crypto from 'crypto';
 import connectionManager from '../services/connectionManager.js';
+import multer from 'multer';
+// Import the library file directly to avoid pdf-parse's index debug-mode file read
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 import { validate } from '../middleware/validation.js';
 
 const router = express.Router();
+
+// In-memory upload handler for PDF documents (max 10 MB)
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -314,6 +323,39 @@ router.get('/:projectId/discussions', async (req, res) => {
   }
 });
 
+// Get discussion messages (cursor-based pagination for loading older messages)
+router.get('/:projectId/discussions/:discussionId/messages', async (req, res) => {
+  try {
+    const { projectId, discussionId } = req.params;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const before = req.query.before || null;
+
+    const { messages, hasMore, nextCursor } = await discussionService.getDiscussionMessages(
+      discussionId,
+      { limit, before }
+    );
+
+    const formattedMessages = messages.map(m => ({
+      _id: m._id,
+      user: m.user,
+      text: m.text,
+      time: m.timestamp,
+      isAI: m.isAI,
+      isSaved: !!m.isSaved
+    }));
+
+    res.json({ success: true, messages: formattedMessages, hasMore, nextCursor });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Create parallel discussion
 router.post('/:projectId/discussions', validate('createDiscussion'), async (req, res) => {
   try {
@@ -499,6 +541,55 @@ router.post('/:projectId/documents', validate('uploadDocument'), async (req, res
     res.json({ success: true, document });
   } catch (error) {
     console.error('Document upload error:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Upload a PDF document — extracts text server-side, then reuses the standard pipeline
+router.post('/:projectId/documents/upload-file', pdfUpload.single('file'), async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const isPdf = req.file.mimetype === 'application/pdf' ||
+      req.file.originalname.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      return res.status(400).json({ success: false, error: 'Only PDF files are supported on this endpoint' });
+    }
+
+    const title = (req.body.title || req.file.originalname.replace(/\.pdf$/i, '')).trim();
+
+    let extractedText;
+    try {
+      const parsed = await pdfParse(req.file.buffer);
+      extractedText = (parsed.text || '').trim();
+    } catch (err) {
+      return res.status(400).json({ success: false, error: 'Could not read PDF file' });
+    }
+
+    if (!extractedText) {
+      return res.status(400).json({ success: false, error: 'No extractable text found in PDF' });
+    }
+
+    const document = await documentService.uploadDocument(
+      projectId,
+      title,
+      extractedText,
+      'pdf',
+      req.user.userId
+    );
+
+    res.json({ success: true, document });
+  } catch (error) {
+    console.error('PDF upload error:', error);
     res.status(400).json({ success: false, error: error.message });
   }
 });

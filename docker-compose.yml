@@ -19,18 +19,26 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Vite vars are baked in at build time. Point the built frontend at the
+      # backend that serves it (same container, port 8080).
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
+        VITE_WS_BASE_URL: ws://localhost:8080
     container_name: collabai-app
     restart: unless-stopped
+    # The container serves BOTH the API and the built frontend on 8080.
     ports:
-      - "5173:5173"
       - "8080:8080"
     environment:
       NODE_ENV: production
       PORT: 8080
       MONGODB_URI: mongodb://admin:admin123@mongodb:27017/collabai?authSource=admin
-      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
-      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
-      VITE_API_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:8080
+      # Secrets — provided via a root .env file (see .env.example). The :? form
+      # makes `docker compose up` fail fast with a clear message if they're unset.
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      GROQ_API_KEY: ${GROQ_API_KEY:?Set GROQ_API_KEY in a .env file next to docker-compose.yml}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY (64-char hex) in a .env file next to docker-compose.yml}
     depends_on:
       - mongodb
     networks:

@@ -20,6 +20,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -42,10 +43,13 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [isStreaming, setIsStreaming] = useState(false);
   const streamingTextRef = useRef('');
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
-  
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const mentionRef = useRef(null);
+  const skipNextScrollRef = useRef(false);
 
   const isOwner = project.ownerId._id === user._id;
 
@@ -126,6 +130,10 @@ export default function ProjectWorkspace({ project, onBack }) {
   }, [streamingText, isStreaming, aiThinking]);
 
   useEffect(() => {
+    if (skipNextScrollRef.current) {
+      skipNextScrollRef.current = false;
+      return;
+    }
     if (!highlightedMessageId) {
       endRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -154,11 +162,13 @@ export default function ProjectWorkspace({ project, onBack }) {
     if (lastAtIndex !== -1 && lastAtIndex === input.length - 1) {
       setShowMentions(true);
       setMentionSearch('');
+      setMentionIndex(0);
     } else if (lastAtIndex !== -1) {
       const afterAt = input.slice(lastAtIndex + 1);
       if (!afterAt.includes(' ')) {
         setShowMentions(true);
         setMentionSearch(afterAt.toLowerCase());
+        setMentionIndex(0);
       } else {
         setShowMentions(false);
       }
@@ -195,6 +205,41 @@ export default function ProjectWorkspace({ project, onBack }) {
     }
   };
 
+  const loadOlderMessages = async () => {
+    if (!currentDiscussion || isLoadingOlder || messages.length === 0) return;
+    setIsLoadingOlder(true);
+    const oldest = messages[0];
+    const before = oldest?.time;
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container ? container.scrollHeight : 0;
+    try {
+      const params = new URLSearchParams({ limit: '50' });
+      if (before) params.set('before', before);
+      const response = await apiRequest(
+        `/api/projects/${project._id}/discussions/${currentDiscussion._id}/messages?${params.toString()}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      const data = await response.json();
+      if (data.success) {
+        if (data.messages.length > 0) {
+          skipNextScrollRef.current = true;
+          setMessages(prev => [...data.messages, ...prev]);
+          // Preserve scroll position after prepending older messages
+          requestAnimationFrame(() => {
+            if (container) {
+              container.scrollTop = container.scrollHeight - prevScrollHeight;
+            }
+          });
+        }
+        setHasMoreMessages(!!data.hasMore);
+      }
+    } catch (error) {
+      console.error('Error loading older messages:', error);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  };
+
   const connectWebSocket = () => {
     setWsStatus('connecting');
     const wsUrl = getWsUrl();
@@ -222,7 +267,9 @@ export default function ProjectWorkspace({ project, onBack }) {
       
       if (data.type === 'discussion-joined') {
         setMessages(data.messages);
-        
+        // WS join sends the latest 50; if we got a full page, older messages may exist
+        setHasMoreMessages(data.messages.length >= 50);
+
         // Initialize saved messages state
         const savedIds = new Set();
         data.messages.forEach(m => {
@@ -343,6 +390,35 @@ export default function ProjectWorkspace({ project, onBack }) {
   };
 
   const handleKeyDown = (e) => {
+    // When the @mention dropdown is open, intercept navigation/selection keys
+    // so Enter selects the highlighted option instead of sending the message.
+    if (showMentions) {
+      const options = getMentionOptions();
+      if (options.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setMentionIndex(i => (i + 1) % options.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setMentionIndex(i => (i - 1 + options.length) % options.length);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const selected = options[Math.min(mentionIndex, options.length - 1)];
+          insertMention(selected.username);
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentions(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -632,6 +708,26 @@ export default function ProjectWorkspace({ project, onBack }) {
           </div>
 
           <div style={styles.headerActions}>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="invite-header-btn"
+              title="Invite members"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 14px', marginRight: '8px',
+                background: '#8b5cf6', border: 'none', borderRadius: '8px',
+                color: '#fff', fontSize: '14px', fontWeight: '600',
+                cursor: 'pointer', fontFamily: 'inherit'
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="8.5" cy="7" r="4"/>
+                <line x1="20" y1="8" x2="20" y2="14"/>
+                <line x1="23" y1="11" x2="17" y2="11"/>
+              </svg>
+              Invite
+            </button>
             <button onClick={() => setShowMenu(!showMenu)} style={{...styles.menuBtn, color: colors.text}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
@@ -735,6 +831,21 @@ export default function ProjectWorkspace({ project, onBack }) {
             </div>
           ) : (
             <>
+              {hasMoreMessages && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 16px' }}>
+                  <button
+                    onClick={loadOlderMessages}
+                    disabled={isLoadingOlder}
+                    style={{
+                      background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: 'none',
+                      padding: '6px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '500',
+                      cursor: isLoadingOlder ? 'default' : 'pointer', opacity: isLoadingOlder ? 0.6 : 1
+                    }}
+                  >
+                    {isLoadingOlder ? 'Loading…' : 'Load older messages'}
+                  </button>
+                </div>
+              )}
               {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} colors={colors} onAddToMemory={() => handleAddToMemory(m)} isSaving={savingMessageIds.has(m._id)} isSaved={savedMessageIds.has(m._id)} />)}
               {(aiThinking || isStreaming) && (
                 <div className="msg-bubble-row ai-message-row" style={{
@@ -784,9 +895,8 @@ export default function ProjectWorkspace({ project, onBack }) {
                 <div
                   key={i}
                   onClick={() => insertMention(option.username)}
-                  style={{...styles.mentionItem, ':hover': {background: colors.surfaceHover}}}
-                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  style={{...styles.mentionItem, background: i === mentionIndex ? colors.surfaceHover : 'transparent'}}
+                  onMouseEnter={() => setMentionIndex(i)}
                 >
                   <div style={{
                     ...styles.mentionAvatar,
@@ -826,7 +936,29 @@ export default function ProjectWorkspace({ project, onBack }) {
                       onChange={async (e) => {
                         const file = e.target.files[0];
                         if (!file) return;
-                        
+
+                        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                        if (isPdf) {
+                          try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('title', file.name);
+                            await apiRequest(
+                              `/api/projects/${project._id}/documents/upload-file`,
+                              {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${token}` },
+                                body: formData
+                              }
+                            );
+                            setShowAttachMenu(false);
+                          } catch (error) {
+                            console.error('Error uploading PDF:', error);
+                          }
+                          e.target.value = '';
+                          return;
+                        }
+
                         const reader = new FileReader();
                         reader.onload = async (event) => {
                           try {
@@ -852,7 +984,7 @@ export default function ProjectWorkspace({ project, onBack }) {
                         };
                         reader.readAsText(file);
                       }}
-                      accept=".txt,.md"
+                      accept=".txt,.md,.pdf"
                       style={{ display: 'none' }}
                     />
                   </label>
@@ -1398,8 +1530,40 @@ function Documents({ project, onClose, token, colors }) {
     }
 
     setUploading(true);
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    // PDFs are binary — send as multipart and let the backend extract text
+    if (isPdf) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', file.name);
+        const response = await apiRequest(
+          `/api/projects/${project._id}/documents/upload-file`,
+          {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+          }
+        );
+        const data = await response.json();
+        if (data.success) {
+          loadDocuments();
+        } else {
+          alert(`Upload failed: ${data.error}`);
+        }
+      } catch (error) {
+        console.error('Error uploading PDF:', error);
+        alert('Failed to upload document. Please try again.');
+      } finally {
+        setUploading(false);
+        e.target.value = '';
+      }
+      return;
+    }
+
     const reader = new FileReader();
-    
     reader.onload = async (event) => {
       try {
         const response = await apiRequest(
@@ -1456,7 +1620,7 @@ function Documents({ project, onClose, token, colors }) {
           id="file-upload"
           type="file"
           onChange={uploadDocument}
-          accept=".txt,.md"
+          accept=".txt,.md,.pdf"
           style={{ display: 'none' }}
           disabled={uploading}
         />
@@ -1466,7 +1630,7 @@ function Documents({ project, onClose, token, colors }) {
         {documents.length === 0 ? (
           <div style={styles.emptyState}>
             <p style={{...styles.emptyText, color: colors.textSecondary}}>No documents uploaded yet</p>
-            <p style={{...styles.emptyHint, color: colors.textTertiary}}>Upload .txt or .md files to provide context for AI</p>
+            <p style={{...styles.emptyHint, color: colors.textTertiary}}>Upload .txt, .md, or .pdf files to provide context for AI</p>
           </div>
         ) : (
           <div style={styles.documentsList}>
