@@ -1,31 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../utils/api.js';
 
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
+const severityColor = (s) => ({ low: '#f59e0b', medium: '#f97316', high: '#ef4444' }[s] || '#f97316');
+
+function StatChip({ label, value, color, colors }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '80px' }}>
+      <span style={{ fontSize: '11px', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+      <span style={{ fontSize: '18px', fontWeight: '700', color }}>{value}</span>
+    </div>
+  );
+}
+
 export default function Dashboard({ project, onClose, token, colors, onSourceClick }) {
   const [decisions, setDecisions] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [blockers, setBlockers] = useState([]);
+  const [actionItems, setActionItems] = useState([]);
+  const [projectState, setProjectState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
 
   useEffect(() => {
-    loadDecisions();
+    loadDashboard();
   }, []);
 
-  const loadDecisions = async () => {
+  const loadDashboard = async () => {
     setLoading(true);
     try {
-      const res = await apiRequest(`/api/projects/${project._id}/decisions`, {
+      const res = await apiRequest(`/api/projects/${project._id}/dashboard`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.success) {
-        setDecisions(data.decisions);
+      if (data.success && data.dashboard) {
+        const d = data.dashboard;
+        setDecisions(d.decisions || []);
+        setTopics(d.topics || []);
+        setBlockers(d.blockers || []);
+        setActionItems(d.actionItems || []);
+        setProjectState(d.projectState || null);
       }
     } catch (e) {
-      console.error('Decision load error:', e);
+      console.error('Dashboard load error:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resolveBlocker = async (blockerId) => {
+    try {
+      await apiRequest(`/api/projects/${project._id}/blockers/${blockerId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBlockers(prev => prev.filter(b => b._id !== blockerId));
+    } catch (e) {
+      console.error('Resolve blocker error:', e);
+    }
+  };
+
+  const completeAction = async (actionId) => {
+    try {
+      await apiRequest(`/api/projects/${project._id}/action-items/${actionId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setActionItems(prev => prev.filter(a => a._id !== actionId));
+    } catch (e) {
+      console.error('Complete action error:', e);
     }
   };
 
@@ -57,11 +102,11 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
             </svg>
           </button>
           <div>
-            <h1 style={{ ...styles.title, color: colors.text }}>Project Memory</h1>
-            <p style={{ ...styles.subtitle, color: colors.textSecondary }}>Decision Log for {project.title}</p>
+            <h1 style={{ ...styles.title, color: colors.text }}>Project Intelligence</h1>
+            <p style={{ ...styles.subtitle, color: colors.textSecondary }}>Knowledge graph for {project.title}</p>
           </div>
         </div>
-        <button onClick={loadDecisions} style={{ ...styles.refreshBtn, background: `${colors.border}60`, color: colors.text }} disabled={loading}>
+        <button onClick={loadDashboard} style={{ ...styles.refreshBtn, background: `${colors.border}60`, color: colors.text }} disabled={loading}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={loading ? { animation: 'spin 1s linear infinite' } : {}}>
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
           </svg>
@@ -72,6 +117,76 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
       <div style={styles.accentLine} />
 
       <div className="dashboard-content" style={styles.content}>
+        {/* Project state header */}
+        {!loading && projectState && (
+          <div style={{ ...styles.stateBar, background: colors.surface, border: `1px solid ${colors.border}` }}>
+            <StatChip label="Stage" value={cap(projectState.stage)} color="#667eea" colors={colors} />
+            <StatChip label="Momentum" value={cap(projectState.momentum)} color="#8b5cf6" colors={colors} />
+            <StatChip label="Open Blockers" value={projectState.openBlockerCount ?? blockers.length} color="#ef4444" colors={colors} />
+            <StatChip label="Action Items" value={projectState.unresolvedActionCount ?? actionItems.length} color="#f59e0b" colors={colors} />
+            <StatChip label="Topics" value={projectState.activeTopicCount ?? topics.length} color="#10b981" colors={colors} />
+            <StatChip label="Decisions" value={projectState.decisionCount ?? decisions.length} color="#10b981" colors={colors} />
+          </div>
+        )}
+
+        {/* Topics */}
+        {!loading && topics.length > 0 && (
+          <div style={{ marginBottom: '28px' }}>
+            <h2 style={{ ...styles.sectionTitle, color: colors.text }}>Topics</h2>
+            <div style={styles.topicWrap}>
+              {topics.map(t => (
+                <span key={t._id} style={{ ...styles.topicPill, background: '#10b98115', color: '#10b981', border: '1px solid #10b98140' }}>
+                  {t.name}
+                  {t.occurrenceCount > 1 && <span style={styles.topicCount}>×{t.occurrenceCount}</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Blockers */}
+        {!loading && blockers.length > 0 && (
+          <div style={{ marginBottom: '28px' }}>
+            <h2 style={{ ...styles.sectionTitle, color: colors.text }}>Blockers</h2>
+            <div className="decision-grid" style={styles.decisionGrid}>
+              {blockers.map(b => (
+                <div key={b._id} style={{ ...styles.decisionCard, background: colors.surface, border: `1px solid ${colors.border}` }}>
+                  <div style={styles.decisionHeader}>
+                    <div style={{ ...styles.decisionBadge, background: `${severityColor(b.severity)}20`, color: severityColor(b.severity) }}>
+                      {b.severity} severity
+                    </div>
+                    <span style={{ fontSize: '12px', color: colors.textTertiary }}>×{b.occurrenceCount}</span>
+                  </div>
+                  <h3 style={{ ...styles.decisionText, color: colors.text, flex: 1 }}>{b.text}</h3>
+                  <div style={{ ...styles.decisionFooter, borderTop: `1px solid ${colors.border}` }}>
+                    <button onClick={() => resolveBlocker(b._id)} style={{ ...styles.linkBtn, color: '#10b981' }}>Mark resolved</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action items */}
+        {!loading && actionItems.length > 0 && (
+          <div style={{ marginBottom: '28px' }}>
+            <h2 style={{ ...styles.sectionTitle, color: colors.text }}>Action Items</h2>
+            <div style={styles.actionList}>
+              {actionItems.map(a => (
+                <div key={a._id} style={{ ...styles.actionRow, background: colors.surface, border: `1px solid ${colors.border}` }}>
+                  <button onClick={() => completeAction(a._id)} style={{ ...styles.checkbox, borderColor: colors.border }} title="Mark done" />
+                  <span style={{ color: colors.text, flex: 1 }}>{a.text}</span>
+                  {a.occurrenceCount > 1 && <span style={{ fontSize: '12px', color: colors.textTertiary }}>×{a.occurrenceCount}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <h2 style={{ ...styles.sectionTitle, color: colors.text }}>Decisions</h2>
+        )}
+
         {/* Search input */}
         <div style={{ marginBottom: '24px' }}>
           <input
@@ -291,5 +406,38 @@ const styles = {
   decisionFooter: {
     paddingTop: '12px', marginTop: '4px', fontSize: '13px',
     display: 'flex', alignItems: 'center'
+  },
+  stateBar: {
+    display: 'flex', flexWrap: 'wrap', gap: '28px',
+    padding: '20px 24px', borderRadius: '12px', marginBottom: '28px'
+  },
+  sectionTitle: {
+    fontSize: '15px', fontWeight: '700', margin: '0 0 14px 0',
+    textTransform: 'uppercase', letterSpacing: '0.5px'
+  },
+  topicWrap: {
+    display: 'flex', flexWrap: 'wrap', gap: '10px'
+  },
+  topicPill: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '500'
+  },
+  topicCount: {
+    fontSize: '11px', opacity: 0.7
+  },
+  actionList: {
+    display: 'flex', flexDirection: 'column', gap: '10px'
+  },
+  actionRow: {
+    display: 'flex', alignItems: 'center', gap: '12px',
+    padding: '14px 16px', borderRadius: '10px', fontSize: '14px'
+  },
+  checkbox: {
+    width: '20px', height: '20px', borderRadius: '6px',
+    border: '2px solid', background: 'transparent', cursor: 'pointer', flexShrink: 0
+  },
+  linkBtn: {
+    background: 'transparent', border: 'none', padding: 0,
+    fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit'
   }
 };

@@ -728,4 +728,88 @@ router.get('/:projectId/decisions', async (req, res) => {
   }
 });
 
+// Intelligence dashboard — entity knowledge graph + project state
+router.get('/:projectId/dashboard', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const Topic = (await import('../models/Topic.js')).default;
+    const Blocker = (await import('../models/Blocker.js')).default;
+    const ActionItem = (await import('../models/ActionItem.js')).default;
+    const ProjectState = (await import('../models/ProjectState.js')).default;
+
+    const [projectState, topics, blockers, actionItems, decisions] = await Promise.all([
+      ProjectState.findOne({ projectId }).lean(),
+      Topic.find({ projectId, status: 'stable' }).sort({ occurrenceCount: -1 }).lean(),
+      Blocker.find({ projectId, resolved: false }).sort({ occurrenceCount: -1, raisedAt: -1 }).lean(),
+      ActionItem.find({ projectId, status: 'open' }).sort({ occurrenceCount: -1 }).lean(),
+      Decision.find({ projectId }).sort({ timestamp: -1 }).lean()
+    ]);
+
+    // Surface rule: blockers shown when occurrenceCount >= 2 OR severity high.
+    const surfacedBlockers = blockers.filter(b => b.occurrenceCount >= 2 || b.severity === 'high');
+
+    res.json({
+      success: true,
+      dashboard: {
+        projectState: projectState || {
+          stage: 'ideation', momentum: 'stable',
+          openBlockerCount: 0, unresolvedActionCount: 0, activeTopicCount: 0, decisionCount: decisions.length
+        },
+        topics,
+        blockers: surfacedBlockers,
+        actionItems,
+        decisions
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resolve a blocker
+router.patch('/:projectId/blockers/:blockerId', async (req, res) => {
+  try {
+    const { projectId, blockerId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+    const Blocker = (await import('../models/Blocker.js')).default;
+    const blocker = await Blocker.findOneAndUpdate(
+      { _id: blockerId, projectId },
+      { resolved: true },
+      { new: true }
+    );
+    if (!blocker) return res.status(404).json({ success: false, error: 'Blocker not found' });
+    res.json({ success: true, blocker });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mark an action item done
+router.patch('/:projectId/action-items/:actionId', async (req, res) => {
+  try {
+    const { projectId, actionId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+    const ActionItem = (await import('../models/ActionItem.js')).default;
+    const item = await ActionItem.findOneAndUpdate(
+      { _id: actionId, projectId },
+      { status: 'done' },
+      { new: true }
+    );
+    if (!item) return res.status(404).json({ success: false, error: 'Action item not found' });
+    res.json({ success: true, actionItem: item });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

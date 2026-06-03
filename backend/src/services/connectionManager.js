@@ -263,6 +263,11 @@ class ConnectionManager {
         });
       });
 
+      // Passive knowledge extraction — non-blocking, rate-gated internally.
+      import('../core/intelligence/IntelligencePipeline.js')
+        .then(({ default: pipeline }) => pipeline.onHumanMessage({ projectId, discussionId, text }))
+        .catch(err => logger.warn('Intelligence pipeline trigger failed', { error: err.message }));
+
       // Check for AI invocation
       if (text.startsWith('@CollabAI')) {
         const meta = this.clients.get(ws);

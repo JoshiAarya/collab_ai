@@ -215,7 +215,18 @@ class AIOrchestrator {
       }
     }
 
+    // Pinned project state — a compact, always-injected grounding summary.
+    let pinnedContext = '';
+    try {
+      const ProjectState = (await import('../../models/ProjectState.js')).default;
+      const state = await ProjectState.findOne({ projectId }).lean();
+      if (state?.pinnedContext) pinnedContext = state.pinnedContext;
+    } catch (err) {
+      logger.warn('ProjectState load failed in context builder', { error: err.message });
+    }
+
     return {
+      pinnedContext,
       project: project ? {
         title: project.title,
         description: project.problemStatement,
@@ -240,6 +251,11 @@ Be conversational, concise, and natural. Use the project context below to give a
     if (context.project) {
       prompt += `Project: ${context.project.title}\n`;
       if (context.project.description) prompt += `${context.project.description}\n\n`;
+    }
+
+    // Pinned state — compact grounding summary of the project's knowledge graph.
+    if (context.pinnedContext) {
+      prompt += `## Project State\n${context.pinnedContext}\n\n`;
     }
 
     if (context.discussion) {
