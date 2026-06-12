@@ -33,7 +33,9 @@ const projectSchema = new mongoose.Schema({
   activeLLM: {
     provider: {
       type: String,
-      enum: ['groq', 'gemini', 'openai', 'claude', 'deepseek', 'anthropic', 'google', 'server'],
+      // 'gemini' and 'claude' are legacy values kept so existing documents
+      // still validate; AIOrchestrator maps them to 'google'/'anthropic'.
+      enum: ['groq', 'gemini', 'openai', 'claude', 'deepseek', 'xai', 'anthropic', 'google', 'server'],
       default: 'server'
     },
     model: {

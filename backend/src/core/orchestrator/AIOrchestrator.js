@@ -16,6 +16,13 @@ import EncryptionService from '../stability/EncryptionService.js';
 import LLMGuardrails from '../stability/LLMGuardrails.js';
 import Decision from '../../models/Decision.js';
 
+// Legacy provider names stored on older Project documents.
+const LEGACY_PROVIDER_MAP = { gemini: 'google', claude: 'anthropic' };
+
+// Anthropic models from Opus 4.7 onward reject sampling parameters
+// (temperature/top_p/top_k return a 400).
+const ANTHROPIC_NO_SAMPLING = /claude-(opus-4-[78]|fable|mythos)/i;
+
 class AIOrchestrator {
   constructor() {
     this.modelConfigs = {
@@ -23,7 +30,9 @@ class AIOrchestrator {
       'server': { maxTokens: 8192, contextWindow: 8000, supportsStreaming: true },
       'openai': { maxTokens: 4096, contextWindow: 16000, supportsStreaming: true },
       'anthropic': { maxTokens: 4096, contextWindow: 100000, supportsStreaming: true },
-      'google': { maxTokens: 8192, contextWindow: 32000, supportsStreaming: true }
+      'google': { maxTokens: 8192, contextWindow: 32000, supportsStreaming: true },
+      'deepseek': { maxTokens: 4096, contextWindow: 32000, supportsStreaming: true },
+      'xai': { maxTokens: 4096, contextWindow: 32000, supportsStreaming: true }
     };
   }
 
@@ -98,27 +107,34 @@ class AIOrchestrator {
     const { projectId, userId } = params;
     try {
       const { requestId, selectedModel, messages } = await this._prepareRequest(params);
-      const apiKey = await this.getApiKey(selectedModel.provider, projectId);
-
-      // Streaming is only supported for Groq/server for now
       const provider = selectedModel.provider;
-      if (provider === 'groq' || provider === 'server') {
+      const model = selectedModel.model;
+      const apiKey = await this.getApiKey(provider, projectId);
+      const maxTokens = 1024;
+
+      const streamer = {
+        'groq': () => this.callGroqStreaming({ model, messages, maxTokens, apiKey }, onChunk),
+        'server': () => this.callGroqStreaming({ model, messages, maxTokens, apiKey }, onChunk),
+        'openai': () => this.callOpenAIStreaming({ model, messages, maxTokens, apiKey }, onChunk),
+        'deepseek': () => this.callOpenAIStreaming({ model, messages, maxTokens, apiKey, baseURL: 'https://api.deepseek.com' }, onChunk),
+        'xai': () => this.callOpenAIStreaming({ model, messages, maxTokens, apiKey, baseURL: 'https://api.x.ai/v1' }, onChunk),
+        'anthropic': () => this.callAnthropicStreaming({ model, messages, maxTokens, apiKey }, onChunk),
+        'google': () => this.callGoogleStreaming({ model, messages, maxTokens, apiKey }, onChunk)
+      }[provider];
+
+      if (streamer) {
         const fullText = await LLMGuardrails.guardedCall(
-          { requestId, provider: selectedModel.provider, model: selectedModel.model, messages, projectId },
-          async () => {
-            return await this.callGroqStreaming({
-              model: selectedModel.model, messages, maxTokens: 1024, apiKey
-            }, onChunk);
-          }
+          { requestId, provider, model, messages, projectId },
+          streamer
         );
         logger.ai('Streaming response complete', { requestId, provider, responseLength: fullText.length });
         return fullText;
       }
 
-      // Fallback: non-streaming for other providers
+      // Fallback: non-streaming for unknown providers
       const response = await this.callProvider({
-        requestId, provider, model: selectedModel.model, context: null,
-        prompt: params.prompt, messagesOverride: messages, projectId, userId, maxTokens: 1024
+        requestId, provider, model, context: null,
+        prompt: params.prompt, messagesOverride: messages, projectId, userId, maxTokens
       });
       onChunk(response); // send as single chunk
       return response;
@@ -133,13 +149,43 @@ class AIOrchestrator {
 
   selectModel(llmConfig) {
     if (!llmConfig || !llmConfig.provider) return { provider: 'groq', model: 'llama-3.1-8b-instant' };
-    
+
     // The 'server' model from the frontend needs to be mapped to an actual Groq model
     if (llmConfig.provider === 'server' && llmConfig.model === 'server') {
       return { provider: 'server', model: 'llama-3.1-8b-instant' };
     }
-    
-    return llmConfig;
+
+    const provider = LEGACY_PROVIDER_MAP[llmConfig.provider] || llmConfig.provider;
+    return { ...llmConfig, provider };
+  }
+
+  /**
+   * Anthropic and Google require strictly alternating chat roles and a
+   * conversation that starts with a user turn. Our multi-user history
+   * routinely produces consecutive user messages ("Alice: ...", "Bob: ..."),
+   * so merge same-role runs and fold a leading assistant turn into the
+   * first user message.
+   */
+  _normalizeChatMessages(chatMessages) {
+    const merged = [];
+    for (const m of chatMessages) {
+      const last = merged[merged.length - 1];
+      if (last && last.role === m.role) {
+        last.content += '\n\n' + m.content;
+      } else {
+        merged.push({ role: m.role, content: m.content });
+      }
+    }
+
+    if (merged.length > 0 && merged[0].role === 'assistant') {
+      merged[0] = { role: 'user', content: `[Earlier assistant reply]\n${merged[0].content}` };
+      if (merged[1] && merged[1].role === 'user') {
+        merged[0].content += '\n\n' + merged[1].content;
+        merged.splice(1, 1);
+      }
+    }
+
+    return merged;
   }
 
   async buildProjectContext({ projectId, discussionId, prompt }) {
@@ -335,12 +381,16 @@ Be conversational, concise, and natural. Use the project context below to give a
       model = 'llama-3.1-8b-instant';
     }
 
-    const providerMaxTokens = { groq: 1024, server: 8192, openai: 4096, anthropic: 8192, google: 8192 };
+    const providerMaxTokens = { groq: 1024, server: 8192, openai: 4096, anthropic: 8192, google: 8192, deepseek: 4096, xai: 4096 };
     const resolvedMaxTokens = maxTokens ?? (providerMaxTokens[provider] || 1024);
 
-    let messages = messagesOverride || this.constructMessages(context, prompt, systemPrompt);
-    const { messages: trimmedMessages } = TokenManager.trimContext(context, messages, model, requestId);
-    messages = trimmedMessages;
+    // messagesOverride arrives pre-trimmed from _prepareRequest — don't trim twice.
+    let messages = messagesOverride;
+    if (!messages) {
+      messages = this.constructMessages(context, prompt, systemPrompt);
+      const { messages: trimmedMessages } = TokenManager.trimContext(context, messages, model, requestId);
+      messages = trimmedMessages;
+    }
 
     const result = await LLMGuardrails.guardedCall(
       { requestId, provider, model, messages, projectId },
@@ -356,8 +406,14 @@ Be conversational, concise, and natural. Use the project context below to give a
             return await this.callAnthropic({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
           case 'google':
             return await this.callGoogle({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey });
+          case 'deepseek':
+            // OpenAI-compatible API
+            return await this.callOpenAI({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey, baseURL: 'https://api.deepseek.com' });
+          case 'xai':
+            // OpenAI-compatible API
+            return await this.callOpenAI({ model, messages, temperature, maxTokens: resolvedMaxTokens, apiKey, baseURL: 'https://api.x.ai/v1' });
           default:
-      throw new Error(`Unsupported provider: ${provider}`);
+            throw new Error(`Unsupported provider: ${provider}`);
         }
       }
     );
@@ -400,22 +456,104 @@ Be conversational, concise, and natural. Use the project context below to give a
     return fullText || 'No response generated.';
   }
 
-  async callOpenAI({ model, messages, temperature, maxTokens, apiKey }) {
-    const client = new OpenAI({ apiKey });
+  async callOpenAI({ model, messages, temperature, maxTokens, apiKey, baseURL }) {
+    const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
     const completion = await client.chat.completions.create({ model, messages, temperature, max_tokens: maxTokens });
     return { content: completion.choices[0]?.message?.content || 'No response generated.', usage: completion.usage || null };
+  }
+
+  /**
+   * Streaming for OpenAI-compatible APIs (OpenAI, DeepSeek, xAI)
+   */
+  async callOpenAIStreaming({ model, messages, maxTokens, apiKey, baseURL }, onChunk) {
+    const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+    const stream = await client.chat.completions.create({
+      model, messages, max_tokens: maxTokens, temperature: 0.7, stream: true
+    });
+    let fullText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        onChunk(delta);
+      }
+    }
+    return fullText || 'No response generated.';
+  }
+
+  /**
+   * Streaming Anthropic call
+   */
+  async callAnthropicStreaming({ model, messages, maxTokens, apiKey }, onChunk) {
+    const client = new Anthropic({ apiKey });
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = this._normalizeChatMessages(messages.filter(m => m.role !== 'system'));
+
+    const params = {
+      model, max_tokens: maxTokens,
+      system: systemMsg?.content || '',
+      messages: chatMessages
+    };
+    if (!ANTHROPIC_NO_SAMPLING.test(model)) {
+      params.temperature = 0.7;
+    }
+
+    const stream = client.messages.stream(params);
+    stream.on('text', (delta) => onChunk(delta));
+    const final = await stream.finalMessage();
+    const text = final.content.find(b => b.type === 'text')?.text;
+    return text || 'No response generated.';
+  }
+
+  /**
+   * Streaming Google Gemini call
+   */
+  async callGoogleStreaming({ model, messages, maxTokens, apiKey }, onChunk) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genAI.getGenerativeModel({
+      model, generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens }
+    });
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = this._normalizeChatMessages(messages.filter(m => m.role !== 'system'));
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    const history = chatMessages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }]
+    }));
+    let userPrompt = lastMsg?.content || '';
+    if (systemMsg?.content && history.length === 0) {
+      userPrompt = `${systemMsg.content}\n\n${userPrompt}`;
+    }
+    const chat = geminiModel.startChat({ history });
+    const result = await chat.sendMessageStream(userPrompt);
+    let fullText = '';
+    for await (const chunk of result.stream) {
+      const delta = chunk.text();
+      if (delta) {
+        fullText += delta;
+        onChunk(delta);
+      }
+    }
+    return fullText || 'No response generated.';
   }
 
   async callAnthropic({ model, messages, temperature, maxTokens, apiKey }) {
     const client = new Anthropic({ apiKey });
     const systemMsg = messages.find(m => m.role === 'system');
-    const chatMessages = messages.filter(m => m.role !== 'system');
-    const response = await client.messages.create({
-      model, max_tokens: maxTokens, temperature,
+    const chatMessages = this._normalizeChatMessages(messages.filter(m => m.role !== 'system'));
+
+    const params = {
+      model, max_tokens: maxTokens,
       system: systemMsg?.content || '',
       messages: chatMessages
-    });
-    return { content: response.content[0]?.text || 'No response generated.', usage: response.usage || null };
+    };
+    // Opus 4.7+ / Fable models reject sampling parameters with a 400.
+    if (!ANTHROPIC_NO_SAMPLING.test(model)) {
+      params.temperature = temperature;
+    }
+
+    const response = await client.messages.create(params);
+    const text = response.content.find(b => b.type === 'text')?.text;
+    return { content: text || 'No response generated.', usage: response.usage || null };
   }
 
   async callGoogle({ model, messages, temperature, maxTokens, apiKey }) {
@@ -424,7 +562,8 @@ Be conversational, concise, and natural. Use the project context below to give a
       model, generationConfig: { temperature, maxOutputTokens: maxTokens }
     });
     const systemMsg = messages.find(m => m.role === 'system');
-    const chatMessages = messages.filter(m => m.role !== 'system');
+    // Gemini requires history to start with a user turn and alternate roles.
+    const chatMessages = this._normalizeChatMessages(messages.filter(m => m.role !== 'system'));
     const lastMsg = chatMessages[chatMessages.length - 1];
     const history = chatMessages.slice(0, -1).map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }]
