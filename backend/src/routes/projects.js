@@ -8,6 +8,7 @@ import aiService from '../services/aiService.js';
 import Decision from '../models/Decision.js';
 import crypto from 'crypto';
 import connectionManager from '../services/connectionManager.js';
+import { dashboardCache } from '../utils/ttlCache.js';
 
 import { validate } from '../middleware/validation.js';
 
@@ -88,12 +89,15 @@ router.post('/join', validate('joinProject'), async (req, res) => {
       alreadyMember = true;
     }
     
-    // If discussionId is provided, also join that specific discussion
+    // If discussionId is provided, also join that specific discussion —
+    // but only if it belongs to the project the invite code is for.
     if (discussionId) {
       try {
-        await discussionService.joinDiscussion(discussionId, req.user.userId);
-        addedToDiscussion = true;
-        console.log(`User ${req.user.userId} joined discussion ${discussionId}`);
+        const discussion = await discussionService.getDiscussionById(discussionId);
+        if (discussion && discussion.projectId.toString() === project._id.toString()) {
+          await discussionService.joinDiscussion(discussionId, req.user.userId);
+          addedToDiscussion = true;
+        }
       } catch (discussionError) {
         console.error('Failed to join discussion:', discussionError);
       }
@@ -134,7 +138,7 @@ router.post('/invite-preview', async (req, res) => {
     let discussionInfo = null;
     if (discussionId) {
       const discussion = await discussionService.getDiscussionById(discussionId);
-      if (discussion) {
+      if (discussion && discussion.projectId.toString() === project._id.toString()) {
         discussionInfo = {
           id: discussion._id,
           title: discussion.title,
@@ -343,6 +347,30 @@ router.post('/:projectId/discussions', validate('createDiscussion'), async (req,
   }
 });
 
+// Get discussion messages (paginated — pass ?before=<messageId> for older pages)
+router.get('/:projectId/discussions/:discussionId/messages', async (req, res) => {
+  try {
+    const { projectId, discussionId } = req.params;
+    const { before } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const discussion = await discussionService.getDiscussionById(discussionId);
+    if (!discussion || discussion.projectId.toString() !== projectId) {
+      return res.status(404).json({ success: false, error: 'Discussion not found' });
+    }
+
+    const messages = await discussionService.getMessagesBefore(discussionId, before, limit);
+    res.json({ success: true, messages, hasMore: messages.length === limit });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Invite member to discussion
 router.post('/:projectId/discussions/:discussionId/invite', async (req, res) => {
   try {
@@ -456,6 +484,13 @@ router.get('/:projectId/documents/:documentId/chunks', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
+    // Document must belong to this project
+    const Document = (await import('../models/Document.js')).default;
+    const doc = await Document.findOne({ _id: documentId, projectId }).select('_id').lean();
+    if (!doc) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
     const chunks = await documentService.getDocumentChunks(documentId);
     res.json({ success: true, chunks });
   } catch (error) {
@@ -500,6 +535,34 @@ router.post('/:projectId/documents', validate('uploadDocument'), async (req, res
   } catch (error) {
     console.error('Document upload error:', error);
     res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Delete document (project owner or the uploader)
+router.delete('/:projectId/documents/:documentId', async (req, res) => {
+  try {
+    const { projectId, documentId } = req.params;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const document = await documentService.getDocumentById(documentId);
+    if (!document || document.projectId.toString() !== projectId) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    const isUploader = document.uploadedBy?._id?.toString() === req.user.userId.toString();
+    if (!isOwner && !isUploader) {
+      return res.status(403).json({ success: false, error: 'Only the owner or uploader can delete this document' });
+    }
+
+    await documentService.deleteDocument(documentId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -583,9 +646,9 @@ router.put('/:projectId/discussions/:discussionId/summaries/:summaryId', async (
 
     const project = await projectService.getProjectById(projectId);
     
-    // Get existing summary
+    // Get existing summary — must belong to this project
     const existingSummary = await summaryService.getSummaryById(summaryId);
-    if (!existingSummary) {
+    if (!existingSummary || existingSummary.projectId.toString() !== projectId) {
       return res.status(404).json({ success: false, error: 'Summary not found' });
     }
 
@@ -617,6 +680,11 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
+    const summary = await summaryService.getSummaryById(summaryId);
+    if (!summary || summary.projectId.toString() !== projectId) {
+      return res.status(404).json({ success: false, error: 'Summary not found' });
+    }
+
     await summaryService.deleteSummary(summaryId);
     res.json({ success: true });
   } catch (error) {
@@ -627,7 +695,7 @@ router.delete('/:projectId/discussions/:discussionId/summaries/:summaryId', asyn
 router.post('/:projectId/decisions', async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { messageId, discussionId } = req.body;
+    const { messageId } = req.body;
 
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
     if (!isMember) {
@@ -636,8 +704,11 @@ router.post('/:projectId/decisions', async (req, res) => {
 
     const Message = (await import('../models/Message.js')).default;
 
-    const message = await Message.findById(messageId);
+    // Message must belong to this project; derive discussionId from the
+    // message itself rather than trusting the request body.
+    const message = await Message.findOne({ _id: messageId, projectId });
     if (!message) return res.status(404).json({ success: false, error: 'Message not found' });
+    const discussionId = message.discussionId;
 
     const existingDecision = await Decision.findOne({ sourceMessageId: messageId });
     if (existingDecision) {
@@ -659,6 +730,8 @@ router.post('/:projectId/decisions', async (req, res) => {
       type: 'message-saved',
       messageId: messageId
     });
+
+    dashboardCache.invalidate(projectId);
 
     // Respond instantly
     res.json({ success: true, decision });
@@ -738,6 +811,11 @@ router.get('/:projectId/dashboard', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
+    const cached = dashboardCache.get(projectId);
+    if (cached) {
+      return res.json({ success: true, dashboard: cached, cached: true });
+    }
+
     const Topic = (await import('../models/Topic.js')).default;
     const Blocker = (await import('../models/Blocker.js')).default;
     const ActionItem = (await import('../models/ActionItem.js')).default;
@@ -754,59 +832,168 @@ router.get('/:projectId/dashboard', async (req, res) => {
     // Surface rule: blockers shown when occurrenceCount >= 2 OR severity high.
     const surfacedBlockers = blockers.filter(b => b.occurrenceCount >= 2 || b.severity === 'high');
 
-    res.json({
-      success: true,
-      dashboard: {
-        projectState: projectState || {
-          stage: 'ideation', momentum: 'stable',
-          openBlockerCount: 0, unresolvedActionCount: 0, activeTopicCount: 0, decisionCount: decisions.length
-        },
-        topics,
-        blockers: surfacedBlockers,
-        actionItems,
-        decisions
-      }
-    });
+    const dashboard = {
+      projectState: projectState || {
+        stage: 'ideation', momentum: 'stable',
+        openBlockerCount: 0, unresolvedActionCount: 0, activeTopicCount: 0, decisionCount: decisions.length
+      },
+      topics,
+      blockers: surfacedBlockers,
+      actionItems,
+      decisions
+    };
+
+    dashboardCache.set(projectId, dashboard);
+    res.json({ success: true, dashboard });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Resolve a blocker
+// After any knowledge-graph mutation, refresh the ProjectState rollup
+// (non-blocking — the response shouldn't wait on it).
+function refreshProjectState(projectId) {
+  dashboardCache.invalidate(projectId);
+  import('../core/intelligence/KnowledgeAggregator.js')
+    .then(({ default: aggregator }) => aggregator.recomputeProjectState(projectId))
+    .catch(err => console.warn('[project-state] Recompute failed:', err.message));
+}
+
+// Resolve or reopen a blocker
 router.patch('/:projectId/blockers/:blockerId', async (req, res) => {
   try {
     const { projectId, blockerId } = req.params;
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
     if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
 
+    const resolved = req.body.resolved !== false; // default: resolve
+
     const Blocker = (await import('../models/Blocker.js')).default;
     const blocker = await Blocker.findOneAndUpdate(
       { _id: blockerId, projectId },
-      { resolved: true },
+      { resolved },
       { new: true }
     );
     if (!blocker) return res.status(404).json({ success: false, error: 'Blocker not found' });
+
+    refreshProjectState(projectId);
     res.json({ success: true, blocker });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Mark an action item done
+// Mark an action item done or reopen it
 router.patch('/:projectId/action-items/:actionId', async (req, res) => {
   try {
     const { projectId, actionId } = req.params;
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
     if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
 
+    const status = req.body.status === 'open' ? 'open' : 'done';
+
     const ActionItem = (await import('../models/ActionItem.js')).default;
     const item = await ActionItem.findOneAndUpdate(
       { _id: actionId, projectId },
-      { status: 'done' },
+      { status },
       { new: true }
     );
     if (!item) return res.status(404).json({ success: false, error: 'Action item not found' });
+
+    refreshProjectState(projectId);
     res.json({ success: true, actionItem: item });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a knowledge artifact (wrong extractions shouldn't be permanent)
+const ARTIFACT_MODELS = {
+  decisions: '../models/Decision.js',
+  blockers: '../models/Blocker.js',
+  'action-items': '../models/ActionItem.js',
+  topics: '../models/Topic.js'
+};
+
+for (const [resource, modelPath] of Object.entries(ARTIFACT_MODELS)) {
+  router.delete(`/:projectId/${resource}/:artifactId`, async (req, res) => {
+    try {
+      const { projectId, artifactId } = req.params;
+      const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+      if (!isMember) return res.status(403).json({ success: false, error: 'Not a project member' });
+
+      const Model = (await import(modelPath)).default;
+      const deleted = await Model.findOneAndDelete({ _id: artifactId, projectId });
+      if (!deleted) return res.status(404).json({ success: false, error: 'Not found' });
+
+      refreshProjectState(projectId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+}
+
+// Leave project (members only — the owner must delete or transfer instead)
+router.post('/:projectId/leave', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    if (isOwner) {
+      return res.status(400).json({ success: false, error: 'The owner cannot leave their own project. Delete it instead.' });
+    }
+
+    await projectService.removeMember(projectId, req.user.userId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Remove a member (owner only, not themselves)
+router.delete('/:projectId/members/:memberId', async (req, res) => {
+  try {
+    const { projectId, memberId } = req.params;
+
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Only the owner can remove members' });
+    }
+
+    if (memberId === req.user.userId.toString()) {
+      return res.status(400).json({ success: false, error: 'Owner cannot remove themselves' });
+    }
+
+    const isMember = await projectService.isProjectMember(projectId, memberId);
+    if (!isMember) {
+      return res.status(404).json({ success: false, error: 'User is not a project member' });
+    }
+
+    await projectService.removeMember(projectId, memberId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete project and everything in it (owner only)
+router.delete('/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Only the owner can delete the project' });
+    }
+
+    await projectService.deleteProject(projectId);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

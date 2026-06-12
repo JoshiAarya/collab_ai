@@ -1,5 +1,6 @@
 import logger from '../../utils/logger.js';
 import { normalizeText } from '../../utils/normalizeText.js';
+import { dashboardCache } from '../../utils/ttlCache.js';
 import EmbeddingService from '../embeddings/EmbeddingService.js';
 import VectorStore from '../vector/VectorStore.js';
 import Topic from '../../models/Topic.js';
@@ -268,6 +269,8 @@ class KnowledgeAggregator {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+
+    dashboardCache.invalidate(projectId);
 
     logger.ai('ProjectState recomputed', {
       projectId, stage, momentum,

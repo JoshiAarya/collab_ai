@@ -74,6 +74,25 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
     }
   };
 
+  // Permanently remove a wrongly-extracted artifact
+  const deleteArtifact = async (resource, id, setter, label) => {
+    if (!window.confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    try {
+      const res = await apiRequest(`/api/projects/${project._id}/${resource}/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setter(prev => prev.filter(item => item._id !== id));
+      } else {
+        alert(data.error || `Failed to delete ${label}`);
+      }
+    } catch (e) {
+      console.error(`Delete ${label} error:`, e);
+    }
+  };
+
   const filteredDecisions = searchQuery.trim()
     ? decisions.filter(d =>
         d.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -138,6 +157,11 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
                 <span key={t._id} style={{ ...styles.topicPill, background: '#10b98115', color: '#10b981', border: '1px solid #10b98140' }}>
                   {t.name}
                   {t.occurrenceCount > 1 && <span style={styles.topicCount}>×{t.occurrenceCount}</span>}
+                  <span
+                    onClick={() => deleteArtifact('topics', t._id, setTopics, 'topic')}
+                    title="Remove topic"
+                    style={{ cursor: 'pointer', opacity: 0.6, marginLeft: '2px', fontSize: '12px' }}
+                  >✕</span>
                 </span>
               ))}
             </div>
@@ -158,8 +182,9 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
                     <span style={{ fontSize: '12px', color: colors.textTertiary }}>×{b.occurrenceCount}</span>
                   </div>
                   <h3 style={{ ...styles.decisionText, color: colors.text, flex: 1 }}>{b.text}</h3>
-                  <div style={{ ...styles.decisionFooter, borderTop: `1px solid ${colors.border}` }}>
+                  <div style={{ ...styles.decisionFooter, borderTop: `1px solid ${colors.border}`, gap: '16px' }}>
                     <button onClick={() => resolveBlocker(b._id)} style={{ ...styles.linkBtn, color: '#10b981' }}>Mark resolved</button>
+                    <button onClick={() => deleteArtifact('blockers', b._id, setBlockers, 'blocker')} style={{ ...styles.linkBtn, color: '#ef4444' }}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -177,6 +202,7 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
                   <button onClick={() => completeAction(a._id)} style={{ ...styles.checkbox, borderColor: colors.border }} title="Mark done" />
                   <span style={{ color: colors.text, flex: 1 }}>{a.text}</span>
                   {a.occurrenceCount > 1 && <span style={{ fontSize: '12px', color: colors.textTertiary }}>×{a.occurrenceCount}</span>}
+                  <button onClick={() => deleteArtifact('action-items', a._id, setActionItems, 'action item')} style={{ ...styles.linkBtn, color: '#ef4444' }} title="Delete">✕</button>
                 </div>
               ))}
             </div>
@@ -260,8 +286,9 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
                     )}
                   </div>
                   
-                  <div style={{ ...styles.decisionFooter, borderTop: `1px solid ${colors.border}` }}>
+                  <div style={{ ...styles.decisionFooter, borderTop: `1px solid ${colors.border}`, justifyContent: 'space-between' }}>
                     <span style={{ color: colors.textSecondary }}>Proposed by <strong style={{ color: colors.text }}>{decision.proposedBy?.username || 'Unknown'}</strong></span>
+                    <button onClick={() => deleteArtifact('decisions', decision._id, setDecisions, 'decision')} style={{ ...styles.linkBtn, color: '#ef4444' }}>Delete</button>
                   </div>
                 </div>
               ))}
