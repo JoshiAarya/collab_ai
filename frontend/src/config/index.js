@@ -10,9 +10,13 @@ const config = {
   isDevelopment: env === 'development',
   isProduction: env === 'production',
 
-  // API Configuration - uses VITE_API_BASE_URL from .env files
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
-  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080',
+  // API Configuration - VITE_API_BASE_URL/VITE_WS_BASE_URL override when set.
+  // In production the backend serves this app, so same-origin is correct;
+  // in dev Vite runs on :5173 while the API runs separately on :8080.
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? window.location.origin : 'http://localhost:8080'),
+  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL ||
+    (import.meta.env.PROD ? window.location.origin.replace(/^http/, 'ws') : 'ws://localhost:8080'),
 
   // API Endpoints
   api: {
