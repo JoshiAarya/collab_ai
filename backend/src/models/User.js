@@ -11,7 +11,6 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: false, // optional for legacy users
-    sparse: true,
     trim: true,
     lowercase: true
   },
@@ -25,8 +24,7 @@ const userSchema = new mongoose.Schema({
     default: 'local'
   },
   googleId: {
-    type: String,
-    sparse: true
+    type: String
   },
   // Profile fields
   bio: {

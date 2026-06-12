@@ -35,5 +35,6 @@ const messageEmbeddingSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 messageEmbeddingSchema.index({ projectId: 1 });
+messageEmbeddingSchema.index({ projectId: 1, timestamp: -1 }); // bounded recent-N retrieval
 
 export default mongoose.model('MessageEmbedding', messageEmbeddingSchema);
