@@ -159,7 +159,8 @@ export function validate(schemaName) {
       return next(new Error(`Validation schema '${schemaName}' not found`));
     }
 
-    const data = { ...req.body, ...req.params, ...req.query };
+    // Body takes precedence — query params must never shadow validated body fields
+    const data = { ...req.query, ...req.params, ...req.body };
     const errors = [];
 
     // Validate each field

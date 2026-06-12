@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import config from "./config/index.js";
@@ -25,7 +26,16 @@ await connectDB();
 
 const app = express();
 
+// Behind a reverse proxy (Render/Railway/etc.) the client IP arrives via
+// X-Forwarded-For — required for accurate rate limiting and logging.
+if (config.isProduction) {
+  app.set('trust proxy', 1);
+}
+
 // Middleware
+// CSP disabled: this server also serves the built SPA and Swagger UI,
+// both of which rely on inline scripts/styles.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: config.corsOrigins,
   credentials: true
@@ -97,21 +107,23 @@ if (config.isDevelopment) {
   });
 }
 
+// Swagger must be registered before the SPA catch-all or it gets swallowed
+// by index.html in production.
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // Serve frontend static files in production
 if (config.nodeEnv === 'production') {
   const frontendPath = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(frontendPath));
-  
+
   // Handle client-side routing - serve index.html for all non-API routes
   app.use((req, res, next) => {
-    // Skip API routes and health check
-    if (req.path.startsWith('/api') || req.path === '/health') {
+    if (req.path.startsWith('/api') || req.path === '/health' || req.path.startsWith('/docs')) {
       return next();
     }
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
-  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
 // 404 handler
 app.use(notFoundHandler);
@@ -134,16 +146,19 @@ connectionManager.initialize(server);
 embeddingWorker.start();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  
+function shutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully`);
+
   server.close(() => {
     logger.info('HTTP server closed');
     connectionManager.shutdown();
     embeddingWorker.stop();
     process.exit(0);
   });
-});
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 logger.info('CollabAI Server ready', {
   version: '1.0.0',

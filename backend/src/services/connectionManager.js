@@ -169,13 +169,26 @@ class ConnectionManager {
     const { projectId, discussionId } = data;
 
     try {
-      // Verify membership
-      if (meta.userId) {
-        const isMember = await projectService.isProjectMember(projectId, meta.userId);
-        if (!isMember) {
-          this.sendError(ws, 'Not a project member');
-          return;
-        }
+      if (!meta.userId) {
+        this.sendError(ws, 'Authentication required', 'auth-error');
+        return;
+      }
+
+      if (!projectId || !discussionId) {
+        this.sendError(ws, 'projectId and discussionId required');
+        return;
+      }
+
+      const isMember = await projectService.isProjectMember(projectId, meta.userId);
+      if (!isMember) {
+        this.sendError(ws, 'Not a project member');
+        return;
+      }
+
+      const discussion = await discussionService.getDiscussionById(discussionId);
+      if (!discussion || discussion.projectId.toString() !== projectId.toString()) {
+        this.sendError(ws, 'Discussion not found in this project');
+        return;
       }
 
       // Update metadata
@@ -221,6 +234,11 @@ class ConnectionManager {
     const meta = this.clients.get(ws);
     const { text } = data;
     const { projectId, discussionId, userId, username } = meta;
+
+    if (!userId) {
+      this.sendError(ws, 'Authentication required', 'auth-error');
+      return;
+    }
 
     if (!projectId || !discussionId) {
       this.sendError(ws, 'Not in a project discussion');

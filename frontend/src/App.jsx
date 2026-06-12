@@ -19,7 +19,6 @@ function AppContent() {
   const [discussionId, setDiscussionId] = useState(null);
   const [isJoining, setIsJoining] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteProjectData, setInviteProjectData] = useState(null);
   const [oauthHandled, setOauthHandled] = useState(false);
 
   // Check for invite link in URL
@@ -114,7 +113,7 @@ function AppContent() {
         setDiscussionId(null);
         setShowInviteModal(false);
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to join project');
       clearUrl();
       setInviteCode(null);
@@ -141,14 +140,16 @@ function AppContent() {
     }
   }, [user, inviteCode]);
 
-  // Handle OAuth callback
+  // Handle OAuth callback — token arrives in the URL fragment (never sent to
+  // servers), error arrives as a query param.
   useEffect(() => {
     if (oauthHandled) return;
-    
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const provider = params.get('provider');
-    const error = params.get('error');
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const token = hashParams.get('token');
+    const provider = hashParams.get('provider');
+    const error = searchParams.get('error');
 
     if (error) {
       toast.error('Authentication failed. Please try again.');
@@ -157,7 +158,7 @@ function AppContent() {
     } else if (token && provider) {
       // Store token
       localStorage.setItem('collab-ai-token', token);
-      // Clean URL
+      // Clean URL (drops the fragment)
       window.history.replaceState({}, document.title, window.location.pathname);
       setOauthHandled(true);
       // Trigger auth refresh

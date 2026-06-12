@@ -4,18 +4,16 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "setup": "node src/scripts/setup.js",
     "simulate": "node src/scripts/simulate-conversation.js",
     "simulate:reset": "node src/scripts/simulate-conversation.js --reset",
     "simulate:fast": "node src/scripts/simulate-conversation.js --delay=0",
     "simulate:hirehub": "node src/scripts/simulate-hirehub.js",
     "simulate:hirehub:reset": "node src/scripts/simulate-hirehub.js --reset",
-    "simulate:hirehub:fast": "node src/scripts/simulate-hirehub.js --delay=0",
-    "clean:artifacts": "node src/scripts/clean-cross-project-artifacts.js",
-    "clean:artifacts:delete": "node src/scripts/clean-cross-project-artifacts.js --delete"
+    "simulate:hirehub:fast": "node src/scripts/simulate-hirehub.js --delay=0"
   },
   "keywords": [],
   "author": "",
@@ -29,14 +27,21 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.5.2",
     "groq-sdk": "^0.37.0",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.19.3",
     "node-fetch": "^3.3.2",
-    "nodemon": "^3.1.11",
     "openai": "^6.32.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.8"
   }
 }
