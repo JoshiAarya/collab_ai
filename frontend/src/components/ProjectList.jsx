@@ -10,7 +10,7 @@ export default function ProjectList({ onSelectProject }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { token, user, logout } = useAuth();
+  const { token, user } = useAuth();
   const { colors } = useTheme();
 
   useEffect(() => {
@@ -403,7 +403,7 @@ function JoinProjectModal({ token, colors, onClose, onJoined }) {
       } else {
         setError(data.error);
       }
-    } catch (error) {
+    } catch {
       setError('Failed to join project');
     } finally {
       setLoading(false);
