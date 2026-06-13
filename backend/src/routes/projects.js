@@ -741,7 +741,7 @@ router.post('/:projectId/decisions', async (req, res) => {
       try {
         const AIOrchestrator = (await import('../core/orchestrator/AIOrchestrator.js')).default;
         const project = await projectService.getProjectById(projectId);
-        const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.\nSpeaker: ${message.user}\nRaw message: "${message.text}"\n\nWrite a single clean declarative statement capturing the decision made. Rules:\n- Start with a verb or technology name\n- Maximum 15 words\n- Never use first person\n- Never quote the raw text verbatim\n- If the message contains a clear reason, extract it as rationale separately\n\nReturn ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}\nRationale can be empty string if no clear reason given.`;
+        const prompt = `You are normalizing a raw team conversation message into a clean decision record. The team may be working in any domain (engineering, design, research, marketing, operations, writing, etc.).\nSpeaker: ${message.user}\nRaw message: "${message.text}"\n\nWrite a single clean declarative statement capturing the decision made. Rules:\n- Start with a verb or noun\n- Maximum 15 words\n- Never use first person\n- Never quote the raw text verbatim\n- If the message contains a clear reason, extract it as rationale separately\n\nReturn ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}\nRationale can be empty string if no clear reason given.`;
 
         const crypto = await import('crypto');
         const llmConfig = project.activeLLM || { provider: 'server', model: 'llama-3.1-8b-instant' };

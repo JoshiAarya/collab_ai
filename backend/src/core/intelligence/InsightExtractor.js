@@ -24,20 +24,20 @@ class InsightExtractor {
       .map(m => `${m.user}: ${m.text}`)
       .join('\n');
 
-    return `You are an analyst reading a team's engineering conversation. Extract durable knowledge from the transcript below.
+    return `You are an analyst reading a team's working conversation. The team may be working in any domain (e.g. engineering, design, research, marketing, operations, writing). Extract durable knowledge from the transcript below.
 
 Transcript:
 ${transcript}
 
 Extract four kinds of artifacts. Be strict — only include something if it is clearly present. Prefer returning empty arrays over guessing.
 
-- decisions: concrete choices the team committed to (e.g. "Use Redis for caching"). Include a short rationale if stated.
+- decisions: concrete choices the team committed to (e.g. "Use Redis for caching", "Launch the campaign in March"). Include a short rationale if stated.
 - blockers: problems, risks, or impediments slowing progress. Rate severity low/medium/high.
-- actionItems: specific next steps someone should take (e.g. "Write migration script for user table").
-- topics: short noun-phrase themes being discussed (e.g. "authentication", "rate limiting"). 1-4 words each.
+- actionItems: specific next steps someone should take (e.g. "Write migration script for user table", "Draft the onboarding email").
+- topics: short noun-phrase themes being discussed (e.g. "authentication", "budget planning"). 1-4 words each.
 
 Rules for ALL text fields:
-- Neutral engineering language, no first person, no conversational filler ("we'll", "let's", "I think").
+- Neutral, professional language, no first person, no conversational filler ("we'll", "let's", "I think").
 - Start with a verb or a technology/noun. Maximum 15 words.
 - Never quote the raw message verbatim.
 
