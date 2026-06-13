@@ -1,0 +1,32 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# One Docker web service that builds the frontend and serves it from the
+# backend on Render's injected $PORT. MongoDB is external (MongoDB Atlas).
+services:
+  - type: web
+    name: collabai
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Auto-generated strong secret for signing JWTs.
+      - key: JWT_SECRET
+        generateValue: true
+      # Set manually in the dashboard — must be 64 hex chars:
+      #   openssl rand -hex 32
+      - key: ENCRYPTION_KEY
+        sync: false
+      # MongoDB Atlas connection string (mongodb+srv://...).
+      - key: MONGODB_URI
+        sync: false
+      # Groq API key (the default no-key-needed provider for the app).
+      - key: GROQ_API_KEY
+        sync: false
+      # Set to this service's public URL once known, e.g.
+      #   https://collabai.onrender.com
+      - key: CORS_ORIGINS
+        sync: false
