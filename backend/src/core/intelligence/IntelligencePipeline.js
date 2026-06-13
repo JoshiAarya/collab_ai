@@ -3,6 +3,7 @@ import InsightExtractor from './InsightExtractor.js';
 import KnowledgeAggregator from './KnowledgeAggregator.js';
 import discussionService from '../../services/discussionService.js';
 import projectService from '../../services/projectService.js';
+import { isAIMention } from '../../utils/aiMention.js';
 
 const EXTRACT_EVERY_N = 7;   // run extraction once per this many human messages
 const WINDOW_SIZE = 13;      // human messages to feed the extractor
@@ -28,7 +29,7 @@ class IntelligencePipeline {
    */
   onHumanMessage({ projectId, discussionId, text }) {
     if (!text || text.length < MIN_MESSAGE_LENGTH) return;
-    if (text.trim().startsWith('@CollabAI')) return;
+    if (isAIMention(text)) return;
 
     const key = discussionId.toString();
     const count = (this.counters.get(key) || 0) + 1;

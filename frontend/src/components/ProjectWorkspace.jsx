@@ -28,6 +28,7 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -216,6 +217,7 @@ export default function ProjectWorkspace({ project, onBack }) {
 
   // Check for @ mentions
   useEffect(() => {
+    setMentionIndex(0);
     const lastAtIndex = input.lastIndexOf('@');
     if (lastAtIndex !== -1 && lastAtIndex === input.length - 1) {
       setShowMentions(true);
@@ -393,8 +395,8 @@ export default function ProjectWorkspace({ project, onBack }) {
     
     setIsSendingMessage(true);
     
-    // Check if mentioning AI
-    if (input.includes('@CollabAI')) {
+    // Check if mentioning AI (case-insensitive, matching the backend trigger)
+    if (/^\s*@collabai\b/i.test(input)) {
       setAiThinking(true);
     }
     
@@ -411,6 +413,31 @@ export default function ProjectWorkspace({ project, onBack }) {
   };
 
   const handleKeyDown = (e) => {
+    if (showMentions) {
+      const options = getMentionOptions();
+      if (options.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setMentionIndex(i => (i + 1) % options.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setMentionIndex(i => (i - 1 + options.length) % options.length);
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          insertMention(options[Math.min(mentionIndex, options.length - 1)].username);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowMentions(false);
+          return;
+        }
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -870,9 +897,8 @@ export default function ProjectWorkspace({ project, onBack }) {
                 <div
                   key={i}
                   onClick={() => insertMention(option.username)}
-                  style={{...styles.mentionItem, ':hover': {background: colors.surfaceHover}}}
-                  onMouseEnter={(e) => e.currentTarget.style.background = colors.surfaceHover}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  style={{...styles.mentionItem, background: i === mentionIndex ? colors.surfaceHover : 'transparent'}}
+                  onMouseEnter={() => setMentionIndex(i)}
                 >
                   <div style={{
                     ...styles.mentionAvatar,

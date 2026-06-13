@@ -10,6 +10,7 @@ import authService from './authService.js';
 import projectService from './projectService.js';
 import discussionService from './discussionService.js';
 import aiService from './aiService.js';
+import { isAIMention, stripAIMention } from '../utils/aiMention.js';
 
 
 class ConnectionManager {
@@ -287,7 +288,7 @@ class ConnectionManager {
         .catch(err => logger.warn('Intelligence pipeline trigger failed', { error: err.message }));
 
       // Check for AI invocation
-      if (text.startsWith('@CollabAI')) {
+      if (isAIMention(text)) {
         const meta = this.clients.get(ws);
         await this.handleAIInvocation(ws, text, projectId, discussionId, meta?.userId);
       }
@@ -305,7 +306,7 @@ class ConnectionManager {
    * Handle AI invocation
    */
   async handleAIInvocation(ws, text, projectId, discussionId, userId = null) {
-    const prompt = text.replace('@CollabAI', '').trim();
+    const prompt = stripAIMention(text);
     
     try {
       const project = await projectService.getProjectById(projectId);
@@ -500,7 +501,7 @@ class ConnectionManager {
   async _embedMessage(message, projectId, discussionId) {
     try {
       if (!message.text || message.text.length < 20) return;
-      if (message.text.startsWith('@CollabAI')) return;
+      if (isAIMention(message.text)) return;
       if (message.isAI) return;
 
       const [{ default: EmbeddingService }, { default: MessageEmbedding }] = await Promise.all([

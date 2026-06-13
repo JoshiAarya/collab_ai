@@ -309,7 +309,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
 
       {showApiKeyModal && (
         <div style={styles.modalOverlay} onClick={() => setShowApiKeyModal(false)}>
-          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}}>
+          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
             <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
               <h3 style={{...styles.modalTitle, color: colors.text}}>Set API Key for {PROVIDERS[apiKeyProvider]?.name}</h3>
               <button onClick={() => setShowApiKeyModal(false)} style={styles.closeBtn}>
@@ -340,6 +340,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && apiKey.trim() && !isSubmitting) handleApiKeySubmit(); }}
                     placeholder={`Enter your ${PROVIDERS[apiKeyProvider]?.name} API key`}
                     style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
                     autoFocus

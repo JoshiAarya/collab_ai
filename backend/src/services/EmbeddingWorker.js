@@ -10,6 +10,7 @@
  */
 
 import logger from '../utils/logger.js';
+import { isAIMention } from '../utils/aiMention.js';
 
 class EmbeddingWorker {
   constructor() {
@@ -99,7 +100,7 @@ class EmbeddingWorker {
 
       const unembedded = candidates.filter(m => {
         if (!m.text || m.text.length < 20) return false;
-        if (m.text.startsWith('@CollabAI')) return false;
+        if (isAIMention(m.text)) return false;
         if (embeddedIdSet.has(m._id.toString())) return false;
         return true;
       });
