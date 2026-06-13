@@ -1,22 +1,23 @@
 # CollabAI — Real-Time AI Collaborative Workspace
 
-A real-time collaborative workspace where multiple users work together with a shared AI assistant. Teams collaborate in the same AI context, with semantic document retrieval, a persistent entity knowledge graph, and an intelligence dashboard.
+A real-time collaborative workspace where multiple users work together with a shared AI assistant. Teams collaborate in the same AI context, with semantic retrieval over messages, decisions, and documents, plus a passively-built knowledge graph (topics, decisions, blockers, action items) surfaced on an intelligence dashboard.
 
-## 🎯 Core Problem
+## Core Problem
 
 Current AI platforms follow a single-user model. Teams brainstorm individually and manually merge ideas, leading to lost context, inconsistent AI outputs, and poor collective decision tracking. CollabAI gives every team member access to the **same AI with the same shared context**.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Docker (Recommended)
 
 ```bash
+cp .env.example .env        # fill in MONGO_ROOT_PASSWORD, JWT_SECRET, ENCRYPTION_KEY, GROQ_API_KEY
 docker-compose up --build
 ```
 
-App at **http://localhost:5173** | API at **http://localhost:8080** | Swagger at **http://localhost:8080/docs**
+App at **http://localhost:8080** (API + WS + static frontend) | Swagger at **http://localhost:8080/docs**
 
 ### Local Development
 
@@ -30,184 +31,104 @@ npm run dev
 # Frontend (new terminal)
 cd frontend
 npm install
-npm run dev
+npm run dev                 # http://localhost:5173
 ```
+
+Generate secrets: `openssl rand -base64 48` (JWT_SECRET), `openssl rand -hex 32` (ENCRYPTION_KEY).
 
 ---
 
-## 🎨 Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Vite 7, WebSocket, Marked, DOMPurify, react-toastify, react-icons |
-| Backend | Node.js 20, Express 5, ws (WebSocket) |
+| Frontend | React 19, Vite 7, WebSocket, marked + DOMPurify, react-toastify, react-icons |
+| Backend | Node.js 20 (ESM), Express 5, ws, helmet, express-rate-limit |
 | Database | MongoDB 7 (Mongoose 8) |
-| AI | Groq API — llama-3.1-8b-instant (default) |
+| AI | Groq (server default, streaming) + OpenAI, Anthropic, Google Gemini, DeepSeek, xAI via per-project API keys |
 | Embeddings | Xenova/all-MiniLM-L6-v2 — local, 384-dim, zero API cost |
-| Auth | JWT (7-day expiry) + bcrypt (10 rounds) |
-| Email | SendGrid (requires SENDGRID_API_KEY) |
+| Auth | JWT (7-day expiry) + bcrypt; Google OAuth |
 | API Docs | Swagger UI at `/docs` |
 | Deployment | Docker multi-service + docker-compose |
 
 ---
 
-## ✅ Features
+## Features
 
 ### Core Collaboration
-- **Real-Time Chat** — WebSocket with 30s heartbeat, auto-reconnection, rate limiting (30 msg/min per client)
-- **@CollabAI Mentions** — Invoke AI in any discussion
-- **Parallel Discussions** — Multiple focused threads per project with participant management
-- **Project Management** — Create/join via 8-char hex invite codes, owner/member roles
-- **Document Upload** — `.txt` / `.md` files with async embedding generation (non-blocking)
-- **AI Summaries** — Generate, refine, and persist discussion summaries with custom prompts
-- **Invite System** — Share link, copy invite code, or send email via SendGrid
+- **Real-Time Chat** — WebSocket with 30s heartbeat, auto-reconnection, rate limiting (30 msg/min per client); authentication and project membership enforced on every socket action
+- **@CollabAI Mentions** — invoke the AI in any discussion; responses **stream token-by-token** to all participants (Groq; other providers respond as a single chunk)
+- **Parallel Discussions** — multiple focused threads per project with participant management
+- **Project Management** — create/join via 8-char hex invite codes, owner/member roles
+- **Document Upload** — `.txt` / `.md` files, chunked (900 chars / 100 overlap) with async embedding generation
+- **AI Summaries** — generate, refine, and delete discussion summaries with custom prompts
+- **Invite System** — share link, copy invite code, or send email via SendGrid
 
-### AI Intelligence (8-Phase Architecture)
-- **Semantic Search** — Local Xenova/all-MiniLM-L6-v2 embeddings, cosine similarity, top-5 chunk retrieval
-- **Entity Knowledge Graph** — Topics, Decisions, Blockers, ActionItems extracted from every message (AI + user)
-- **Conversation Window Extraction** — Extraction runs on a sliding window of 8 messages for better context
-- **Deterministic Validation** — 4-layer post-extraction filter: length, noise, appears-in-conversation, commitment language
-- **Semantic Dedup** — Cosine similarity dedup for all entity types (topics at 0.82, others at 0.90)
-- **Persistent Project State** — ProjectState with stage, momentum, pinned context (~100 tokens), open counts
-- **Pinned Context** — Pre-built project summary injected first into every AI prompt
-- **Strategic Signals** — Decision drift, blocker stagnation, topic fragmentation, momentum drop
-- **Token Management** — Conservative counting, context trimming, 90% safety cap
-- **Rate Limiting** — Per-user (20 req/min) and per-project (50 req/min)
-- **LLM Guardrails** — Validation, 30s timeout, single retry, error categorization
-- **API Key Encryption** — AES-256-GCM via EncryptionService
+### AI Intelligence
+- **Entity-aware AI context** — every AI prompt is grounded with: pinned project state (~100-token rollup), semantically retrieved decisions (top 8), parallel discussion summaries, semantically similar past messages (top 15), relevant document chunks (top 5), and the last 30 messages
+- **Passive knowledge extraction** — every 7th human message, a 13-message sliding window is run through LLM extraction (decisions / blockers / action items / topics, strict JSON, temp 0.2), validated, then merged
+- **Dedup ladder** — substring containment → cosine similarity ≥ 0.80 → create new; merges grow `supportingMessageIds` and `occurrenceCount`
+- **Topic lifecycle** — candidate → stable (seen ≥ 3×) → parked (30-day decay); blockers surface at occurrence ≥ 2 or high severity; severity only escalates
+- **Manual decision bookmarking** — save any message as a decision; saved instantly, then LLM-normalized into neutral engineering language and embedded in the background
+- **ProjectState** — stage (ideation/discussion/blocked), momentum (7-day vs prior-7-day volume), open counts, and the pinned context injected into every AI system prompt
+- **EmbeddingWorker** — background 60s loop that retries failed message/decision embeddings (no Redis needed)
+- **Stability layer** — token counting + context trimming, per-user (20/min) and per-project (50/min) AI rate limits, LLM guardrails (30s timeout, retry, error categorization)
+- **API key encryption** — per-project provider keys encrypted at rest with AES-256-GCM
 
-### Dashboard (Owner Only)
-- **Project Intelligence Card** — Stage, momentum trend (↑↓→), open blockers, pending actions, active topics
-- **Decision Timeline** — Enriched decisions with topic name, rationale, timestamp (expandable)
-- **Blocker Tracker** — Open blockers with severity badge, days open, topic name, color-coded border
-- Health bar, topic distribution, activity chart, discussion breakdown, message distribution, contributors, strategic signals
+### Dashboard
+- Project state card (stage, momentum, counts), stable topics, decisions, open blockers (resolvable), open action items (completable)
 
 ### UI/UX
-- **Light/Dark Theme** — Full theme system, per-user persistence in MongoDB
-- **Model Selector** — Server (Groq), OpenAI, Anthropic, Google, DeepSeek, xAI with API key management
-- **Profile Management** — Username, email, bio, password change, stats
-- **Onboarding** — 4-step first-time flow
-- **Google OAuth** — Full implementation (requires credentials)
+- Light/dark theme persisted per-user in MongoDB; model selector with 6 providers and API key management; profile management; 4-step onboarding; Google OAuth
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 CollabAI/
 ├── backend/src/
+│   ├── server.js                       # Express app, helmet, CORS, routes, /docs, static SPA (prod)
+│   ├── config/                         # env config (fail-fast in production), database, swagger
+│   ├── routes/                         # auth.js (rate-limited), projects.js, user.js
+│   ├── middleware/                     # auth (JWT), validation, errorHandler (8 error classes)
+│   ├── services/
+│   │   ├── connectionManager.js        # WS lifecycle, auth + membership enforcement, AI streaming
+│   │   ├── EmbeddingWorker.js          # 60s backfill loop for failed embeddings
+│   │   └── aiService / authService / projectService / discussionService /
+│   │       documentService / summaryService / emailService
 │   ├── core/
-│   │   ├── embeddings/EmbeddingService.js     # Xenova/all-MiniLM-L6-v2, lazy init
+│   │   ├── orchestrator/AIOrchestrator.js   # context builder + 6 provider callers + streaming
 │   │   ├── intelligence/
-│   │   │   ├── InsightExtractor.js            # Window-based extraction + 4-layer validation
-│   │   │   ├── KnowledgeAggregator.js         # Entity upserts, semantic dedup, ProjectState
-│   │   │   ├── ProjectInsightsAggregator.js   # Legacy (kept for migration safety)
-│   │   │   └── StrategicSignalEngine.js       # 4 deterministic signals, <10ms
-│   │   ├── orchestrator/AIOrchestrator.js     # Central AI hub, entity-aware context builder
-│   │   ├── stability/                         # TokenManager, RateLimiter, EncryptionService, LLMGuardrails
-│   │   └── vector/VectorStore.js              # Cosine similarity on MongoDB DocumentChunks
-│   ├── models/
-│   │   ├── Topic.js          # name, normalizedName, embedding[384], count, status
-│   │   ├── Decision.js       # text, rationale, topicId, discussionId, messageId, resolvedBlockerIds[]
-│   │   ├── Blocker.js        # text, severity, resolved, topicId, raisedAt
-│   │   ├── ActionItem.js     # text, status, topicId, blockerId, assignee
-│   │   ├── ProjectState.js   # stage, momentum, pinnedContext, openBlockerCount, etc.
-│   │   └── ProjectInsights.js # Legacy flat model (preserved)
-│   ├── scripts/
-│   │   ├── migrate-knowledge-model.js      # ProjectInsights → entity collections
-│   │   ├── reset-and-reextract.js          # Wipe + re-extract all projects with new pipeline
-│   │   ├── rebuild-pinned-context.js       # Rebuild ProjectState.pinnedContext
-│   │   ├── backfill-topic-embeddings.js    # Generate embeddings for migrated topics
-│   │   ├── clean-noisy-entities.js         # Remove low-signal entities
-│   │   ├── verify-knowledge-model.js       # Print entity counts + orphan decisions
-│   │   └── test-idempotency.js             # Verify no duplicate entities on re-run
-│   └── utils/normalizeText.js              # normalizeText() + normalizeTopicName()
-├── frontend/src/components/
-│   ├── ProjectIntelligenceCard.jsx   # Stage, momentum, counts
-│   ├── DecisionTimeline.jsx          # Enriched decisions with rationale
-│   └── BlockerTracker.jsx            # Open blockers with severity + daysOpen
+│   │   │   ├── IntelligencePipeline.js      # rate gate (every 7 msgs), window builder
+│   │   │   ├── InsightExtractor.js          # LLM JSON extraction + validation
+│   │   │   └── KnowledgeAggregator.js       # dedup ladder, lifecycle, ProjectState
+│   │   ├── embeddings/EmbeddingService.js   # Xenova all-MiniLM-L6-v2, lazy init
+│   │   ├── vector/VectorStore.js            # cosine search: chunks, messages, decisions
+│   │   └── stability/                       # TokenManager, RateLimiter, EncryptionService, LLMGuardrails
+│   ├── models/                         # User, Project, Discussion, Message, MessageEmbedding,
+│   │                                   # Document, DocumentChunk, Summary, Topic, Decision,
+│   │                                   # Blocker, ActionItem, ProjectState
+│   └── scripts/                        # demo-data simulations (npm run simulate)
+└── frontend/src/
+    ├── App.jsx                         # auth gate, invite handling, OAuth callback
+    ├── components/                     # Auth, ProjectList, ProjectWorkspace, Dashboard,
+    │                                   # ModelSelector, Sidebar, ProfileModal, Onboarding
+    ├── contexts/                       # AuthContext, ThemeContext, ToastContext
+    └── services/                       # api.js (HTTP), websocket.js (reconnect + queue)
 ```
 
 ---
 
-## 🔑 API Reference
+## Environment Variables
 
-### Dashboard Response (entity model)
-```json
-{
-  "source": "entity-model",
-  "topics": [{ "name": "string", "count": 1 }],
-  "decisions": ["string"],
-  "openQuestions": ["string"],
-  "actionItems": ["string"],
-  "enrichedDecisions": [{ "text", "rationale", "topicName", "timestamp" }],
-  "enrichedBlockers": [{ "text", "severity", "daysOpen", "topicName", "resolved" }],
-  "enrichedActions": [{ "text", "status", "assignee", "topicName" }],
-  "projectState": { "stage", "momentum", "openBlockerCount", "unresolvedActionCount", "activeTopicCount" },
-  "signals": [], "activity": [], "participants": [], "discussionBreakdown": [], "messageTypes": {}
-}
-```
-
----
-
-## 🤖 AI Context Building
-
-### Entity-Aware (active when ProjectState exists)
-```
-1. ProjectState.pinnedContext  — ~100 token pre-built project summary
-2. Active Decisions            — top 3, with rationale
-3. Open Blockers               — sorted by severity
-4. Active Topics               — top 6 by count
-5. Relevant Documents          — top 5 chunks by cosine similarity
-6. Pending Actions             — top 5 non-completed
-7. Recent Summaries            — last 3 from current discussion
-8. Recent Messages             — last 30 from current discussion
-```
-
-### Extraction Pipeline (per message)
-```
-New message arrives
-→ Build window of last 8 messages from discussion
-→ Concatenate as "Author: text" lines
-→ Send to LLM (temp=0.1) for candidate extraction
-→ Deterministic validation:
-    Filter 1: minimum 15 chars
-    Filter 2: not in noise set
-    Filter 3: words appear in conversation window
-    Filter 4: decisions must contain commitment language
-→ KnowledgeAggregator:
-    Semantic dedup (topics: 0.82, others: 0.90 cosine threshold)
-    Upsert entities with topic linking
-    Recompute ProjectState + pinnedContext
-```
-
----
-
-## 🗄️ Knowledge Graph Scripts
-
-```bash
-# After first deploy or major pipeline change:
-node src/scripts/reset-and-reextract.js          # wipe + re-extract all projects
-node src/scripts/verify-knowledge-model.js        # verify counts + orphan decisions
-
-# One-time migration from ProjectInsights:
-node src/scripts/migrate-knowledge-model.js
-node src/scripts/backfill-topic-embeddings.js
-node src/scripts/rebuild-pinned-context.js
-node src/scripts/clean-noisy-entities.js
-```
-
----
-
-## ⚙️ Environment Variables
-
-### Backend (`.env`)
+### Backend (`backend/.env`)
 ```env
-# Required
+# Required (server refuses to start in production without strong values)
 MONGODB_URI=mongodb://localhost:27017/collabai
-JWT_SECRET=your-secret-key
-GROQ_API_KEY=your-groq-api-key
-ENCRYPTION_KEY=64-char-hex-string
+JWT_SECRET=                      # openssl rand -base64 48
+GROQ_API_KEY=
+ENCRYPTION_KEY=                  # openssl rand -hex 32 (64 hex chars)
 
 # Optional
 PORT=8080
@@ -218,11 +139,12 @@ FROM_EMAIL=noreply@collabai.com
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8080/api/auth/google/callback
 RATE_LIMIT_USER_PER_MIN=20
 RATE_LIMIT_PROJECT_PER_MIN=50
 ```
 
-### Frontend (`.env`)
+### Frontend (`frontend/.env`)
 ```env
 VITE_API_BASE_URL=http://localhost:8080
 VITE_WS_BASE_URL=ws://localhost:8080
@@ -230,32 +152,31 @@ VITE_WS_BASE_URL=ws://localhost:8080
 
 ---
 
-## ⚠️ Known Limitations
+## Demo Data
+
+```bash
+cd backend
+npm run simulate            # simulated team conversation
+npm run simulate:hirehub    # alternative scenario
+```
+
+---
+
+## Known Limitations
 
 | Area | Issue |
 |------|-------|
-| Multi-LLM | Only Groq works — others throw "coming soon" |
-| API Keys | EncryptionService ready, keys still plaintext in DB |
-| Decisions | `looksLikeDecision` filter requires commitment language — exploratory projects show 0 decisions until team makes explicit choices |
-| Testing | No test suite |
-| Monitoring | No Sentry, Prometheus, APM |
-| Mobile | Desktop-first only |
-| Caching | No Redis |
+| Vector search | In-memory cosine over all project embeddings per query — fine for small teams, won't scale to large projects |
+| Pagination | Chat loads the latest 50 messages; older history not yet reachable |
+| Streaming | Token streaming for Groq only; other providers return a single chunk |
+| Testing | No automated test suite yet |
+| Monitoring | No Sentry / Prometheus / APM |
+| Mobile | Desktop-first |
+
+> `SYSTEM_BLUEPRINT.md`, `DISCUSSIONS.md`, and `UI_SCREENS_DOCUMENTATION.md` are historical design documents and may not reflect the current implementation. `README.md` and `ARCHITECTURE.md` are kept current.
 
 ---
 
-## 🔧 Required Before Public Launch
-
-1. Migrate API keys to encrypted storage (EncryptionService already built)
-2. Add production monitoring (Sentry + Prometheus)
-3. Write comprehensive test suite
-4. Complete multi-LLM integration
-5. Add Redis caching for dashboard
-6. Implement message pagination
-7. Remove dead code (Room, roomService, messageService legacy, StructuredExtractor)
-
----
-
-## 📄 License
+## License
 
 MIT

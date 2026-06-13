@@ -47,6 +47,7 @@ const messageSchema = new mongoose.Schema({
 messageSchema.index({ roomId: 1, timestamp: -1 });
 messageSchema.index({ roomId: 1, createdAt: -1 });
 messageSchema.index({ discussionId: 1, timestamp: 1 });
+messageSchema.index({ discussionId: 1, _id: -1 }); // pagination (?before=<id>)
 messageSchema.index({ projectId: 1, createdAt: -1 });
 
 export default mongoose.model('Message', messageSchema);

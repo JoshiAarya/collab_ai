@@ -10,6 +10,7 @@
  */
 
 import logger from '../utils/logger.js';
+import { isAIMention } from '../utils/aiMention.js';
 
 class EmbeddingWorker {
   constructor() {
@@ -80,12 +81,9 @@ class EmbeddingWorker {
         import('../core/embeddings/EmbeddingService.js')
       ]);
 
-      // Get IDs of all already-embedded messages
-      const embeddedIds = await MessageEmbedding.distinct('messageId');
-      const embeddedIdSet = new Set(embeddedIds.map(id => id.toString()));
-
-      // Find messages that should be embedded but aren't
-      // Criteria: not AI, not @CollabAI commands, >= 20 chars, not already embedded
+      // Find recent messages that should be embedded, then check embedding
+      // existence only for that bounded candidate set — never scan the whole
+      // MessageEmbedding collection.
       const candidates = await Message.find({
         isAI: { $ne: true },
         text: { $exists: true }
@@ -94,9 +92,15 @@ class EmbeddingWorker {
         .limit(100) // process max 100 per run to avoid overload
         .lean();
 
+      const candidateIds = candidates.map(m => m._id);
+      const embedded = await MessageEmbedding.find({ messageId: { $in: candidateIds } })
+        .select('messageId')
+        .lean();
+      const embeddedIdSet = new Set(embedded.map(e => e.messageId.toString()));
+
       const unembedded = candidates.filter(m => {
         if (!m.text || m.text.length < 20) return false;
-        if (m.text.startsWith('@CollabAI')) return false;
+        if (isAIMention(m.text)) return false;
         if (embeddedIdSet.has(m._id.toString())) return false;
         return true;
       });

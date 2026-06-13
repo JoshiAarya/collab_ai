@@ -61,7 +61,7 @@ export default function ProfileModal({ onClose }) {
       } else {
         toast.error(data.error || 'Failed to update profile');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update profile');
     } finally {
       setLoading(false);
@@ -102,7 +102,7 @@ export default function ProfileModal({ onClose }) {
       } else {
         toast.error(data.error || 'Failed to change password');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to change password');
     } finally {
       setLoading(false);

@@ -233,6 +233,60 @@ class ProjectService {
     }
   }
 
+  // Remove a member from the project and all its discussions
+  async removeMember(projectId, userId) {
+    await Project.findByIdAndUpdate(projectId, {
+      $pull: { members: { userId } }
+    });
+    await Discussion.updateMany(
+      { projectId },
+      { $pull: { participants: userId } }
+    );
+    await User.findByIdAndUpdate(userId, {
+      $pull: { projects: projectId }
+    });
+  }
+
+  // Delete a project and every resource that belongs to it
+  async deleteProject(projectId) {
+    const [
+      Message, MessageEmbedding, Document, DocumentChunk, Summary,
+      Topic, Decision, Blocker, ActionItem, ProjectState
+    ] = (await Promise.all([
+      import('../models/Message.js'),
+      import('../models/MessageEmbedding.js'),
+      import('../models/Document.js'),
+      import('../models/DocumentChunk.js'),
+      import('../models/Summary.js'),
+      import('../models/Topic.js'),
+      import('../models/Decision.js'),
+      import('../models/Blocker.js'),
+      import('../models/ActionItem.js'),
+      import('../models/ProjectState.js')
+    ])).map(m => m.default);
+
+    await Promise.all([
+      Discussion.deleteMany({ projectId }),
+      Message.deleteMany({ projectId }),
+      MessageEmbedding.deleteMany({ projectId }),
+      Document.deleteMany({ projectId }),
+      DocumentChunk.deleteMany({ projectId }),
+      Summary.deleteMany({ projectId }),
+      Topic.deleteMany({ projectId }),
+      Decision.deleteMany({ projectId }),
+      Blocker.deleteMany({ projectId }),
+      ActionItem.deleteMany({ projectId }),
+      ProjectState.deleteMany({ projectId })
+    ]);
+
+    await User.updateMany(
+      { projects: projectId },
+      { $pull: { projects: projectId } }
+    );
+
+    await Project.findByIdAndDelete(projectId);
+  }
+
   // Get API key for provider
   async getProjectApiKey(projectId, provider) {
     try {

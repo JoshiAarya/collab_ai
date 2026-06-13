@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
+import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
 
 export default function ProjectList({ onSelectProject }) {
@@ -10,7 +11,7 @@ export default function ProjectList({ onSelectProject }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { token, user, logout } = useAuth();
+  const { token, user } = useAuth();
   const { colors } = useTheme();
 
   useEffect(() => {
@@ -185,7 +186,7 @@ function CreateProjectModal({ token, colors, onClose, onCreated }) {
 
   const handleSendInviteEmail = async () => {
     if (!emailInput.trim()) {
-      alert('Please enter an email address');
+      toast.warning('Please enter an email address');
       return;
     }
 
@@ -206,14 +207,14 @@ function CreateProjectModal({ token, colors, onClose, onCreated }) {
       const data = await response.json();
       
       if (data.success) {
-        alert(`Invitation sent to ${emailInput}!`);
+        toast.success(`Invitation sent to ${emailInput}!`);
         setEmailInput('');
       } else {
-        alert(data.error || 'Failed to send invitation');
+        toast.error(data.error || 'Failed to send invitation');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Failed to send invitation. Please try again.');
+      toast.error('Failed to send invitation. Please try again.');
     } finally {
       setSendingEmail(false);
     }
@@ -403,7 +404,7 @@ function JoinProjectModal({ token, colors, onClose, onJoined }) {
       } else {
         setError(data.error);
       }
-    } catch (error) {
+    } catch {
       setError('Failed to join project');
     } finally {
       setLoading(false);

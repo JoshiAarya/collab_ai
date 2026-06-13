@@ -10,6 +10,7 @@ import authService from './authService.js';
 import projectService from './projectService.js';
 import discussionService from './discussionService.js';
 import aiService from './aiService.js';
+import { isAIMention, stripAIMention } from '../utils/aiMention.js';
 
 
 class ConnectionManager {
@@ -169,13 +170,26 @@ class ConnectionManager {
     const { projectId, discussionId } = data;
 
     try {
-      // Verify membership
-      if (meta.userId) {
-        const isMember = await projectService.isProjectMember(projectId, meta.userId);
-        if (!isMember) {
-          this.sendError(ws, 'Not a project member');
-          return;
-        }
+      if (!meta.userId) {
+        this.sendError(ws, 'Authentication required', 'auth-error');
+        return;
+      }
+
+      if (!projectId || !discussionId) {
+        this.sendError(ws, 'projectId and discussionId required');
+        return;
+      }
+
+      const isMember = await projectService.isProjectMember(projectId, meta.userId);
+      if (!isMember) {
+        this.sendError(ws, 'Not a project member');
+        return;
+      }
+
+      const discussion = await discussionService.getDiscussionById(discussionId);
+      if (!discussion || discussion.projectId.toString() !== projectId.toString()) {
+        this.sendError(ws, 'Discussion not found in this project');
+        return;
       }
 
       // Update metadata
@@ -222,6 +236,11 @@ class ConnectionManager {
     const { text } = data;
     const { projectId, discussionId, userId, username } = meta;
 
+    if (!userId) {
+      this.sendError(ws, 'Authentication required', 'auth-error');
+      return;
+    }
+
     if (!projectId || !discussionId) {
       this.sendError(ws, 'Not in a project discussion');
       return;
@@ -263,8 +282,13 @@ class ConnectionManager {
         });
       });
 
+      // Passive knowledge extraction — non-blocking, rate-gated internally.
+      import('../core/intelligence/IntelligencePipeline.js')
+        .then(({ default: pipeline }) => pipeline.onHumanMessage({ projectId, discussionId, text }))
+        .catch(err => logger.warn('Intelligence pipeline trigger failed', { error: err.message }));
+
       // Check for AI invocation
-      if (text.startsWith('@CollabAI')) {
+      if (isAIMention(text)) {
         const meta = this.clients.get(ws);
         await this.handleAIInvocation(ws, text, projectId, discussionId, meta?.userId);
       }
@@ -282,7 +306,7 @@ class ConnectionManager {
    * Handle AI invocation
    */
   async handleAIInvocation(ws, text, projectId, discussionId, userId = null) {
-    const prompt = text.replace('@CollabAI', '').trim();
+    const prompt = stripAIMention(text);
     
     try {
       const project = await projectService.getProjectById(projectId);
@@ -477,7 +501,7 @@ class ConnectionManager {
   async _embedMessage(message, projectId, discussionId) {
     try {
       if (!message.text || message.text.length < 20) return;
-      if (message.text.startsWith('@CollabAI')) return;
+      if (isAIMention(message.text)) return;
       if (message.isAI) return;
 
       const [{ default: EmbeddingService }, { default: MessageEmbedding }] = await Promise.all([

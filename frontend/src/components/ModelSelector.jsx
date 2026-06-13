@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IoSettingsOutline } from 'react-icons/io5';
 import { MdChevronRight } from 'react-icons/md';
+import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
 
 const PROVIDERS = {
@@ -31,9 +32,10 @@ const PROVIDERS = {
     ),
     color: '#d4a574',
     models: [
+      { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
       { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
       { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
-      { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' }
+      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' }
     ]
   },
   google: {
@@ -62,10 +64,9 @@ const PROVIDERS = {
       </svg>
     ),
     color: '#00a6fb',
-    comingSoon: true,
     models: [
       { id: 'deepseek-chat', name: 'DeepSeek Chat' },
-      { id: 'deepseek-coder', name: 'DeepSeek Coder' }
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' }
     ]
   },
   xai: {
@@ -76,9 +77,9 @@ const PROVIDERS = {
       </svg>
     ),
     color: '#ffffff',
-    comingSoon: true,
     models: [
-      { id: 'grok-2-latest', name: 'Grok 2' }
+      { id: 'grok-3', name: 'Grok 3' },
+      { id: 'grok-3-mini', name: 'Grok 3 Mini' }
     ]
   },
   server: {
@@ -161,19 +162,19 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
         setShowApiKeyModal(false);
         setApiKey('');
         setApiKeyProvider(null);
-        alert('API key saved successfully!');
+        toast.success('API key saved successfully!');
       } else {
-        alert('Failed to save API key');
+        toast.error('Failed to save API key');
       }
     } catch (error) {
       console.error('Error saving API key:', error);
-      alert('Error saving API key');
+      toast.error('Error saving API key');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const filteredProviders = Object.entries(PROVIDERS).filter(([id, provider]) => {
+  const filteredProviders = Object.entries(PROVIDERS).filter(([, provider]) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return provider.name.toLowerCase().includes(query) ||
@@ -309,7 +310,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
 
       {showApiKeyModal && (
         <div style={styles.modalOverlay} onClick={() => setShowApiKeyModal(false)}>
-          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}}>
+          <div style={{...styles.modal, background: colors.surface, border: `1px solid ${colors.border}`}} onClick={(e) => e.stopPropagation()}>
             <div style={{...styles.modalHeader, borderBottom: `1px solid ${colors.border}`}}>
               <h3 style={{...styles.modalTitle, color: colors.text}}>Set API Key for {PROVIDERS[apiKeyProvider]?.name}</h3>
               <button onClick={() => setShowApiKeyModal(false)} style={styles.closeBtn}>
@@ -340,6 +341,7 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && apiKey.trim() && !isSubmitting) handleApiKeySubmit(); }}
                     placeholder={`Enter your ${PROVIDERS[apiKeyProvider]?.name} API key`}
                     style={{...styles.input, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
                     autoFocus

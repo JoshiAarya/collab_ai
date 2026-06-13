@@ -10,9 +10,13 @@ const config = {
   isDevelopment: env === 'development',
   isProduction: env === 'production',
 
-  // API Configuration - uses VITE_API_BASE_URL from .env files
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
-  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080',
+  // API Configuration - VITE_API_BASE_URL/VITE_WS_BASE_URL override when set.
+  // In production the backend serves this app, so same-origin is correct;
+  // in dev Vite runs on :5173 while the API runs separately on :8080.
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? window.location.origin : 'http://localhost:8080'),
+  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL ||
+    (import.meta.env.PROD ? window.location.origin.replace(/^http/, 'ws') : 'ws://localhost:8080'),
 
   // API Endpoints
   api: {
@@ -21,25 +25,6 @@ const config = {
       login: '/api/auth/login',
       verify: '/api/auth/verify',
       google: '/api/auth/google'
-    },
-    projects: {
-      list: '/api/projects',
-      create: '/api/projects',
-      get: (id) => `/api/projects/${id}`,
-      update: (id) => `/api/projects/${id}`,
-      join: '/api/projects/join',
-      discussions: (id) => `/api/projects/${id}/discussions`,
-      documents: (id) => `/api/projects/${id}/documents`,
-      summary: (id) => `/api/projects/${id}/summary`
-    },
-    discussions: {
-      create: (projectId) => `/api/projects/${projectId}/discussions`,
-      get: (projectId, discussionId) => `/api/projects/${projectId}/discussions/${discussionId}`,
-      messages: (projectId, discussionId) => `/api/projects/${projectId}/discussions/${discussionId}/messages`
-    },
-    documents: {
-      upload: (projectId) => `/api/projects/${projectId}/documents`,
-      delete: (projectId, docId) => `/api/projects/${projectId}/documents/${docId}`
     }
   },
 
@@ -57,14 +42,6 @@ const config = {
     messageLoadLimit: 50,
     documentMaxSize: 10 * 1024 * 1024, // 10MB
     autoScrollThreshold: 100
-  },
-
-  // Feature Flags
-  features: {
-    offlineMode: true,
-    optimisticUpdates: true,
-    aiStreaming: false, // Coming soon
-    voiceInput: false // Coming soon
   }
 };
 

@@ -131,6 +131,16 @@ class Config {
       const missingNames = missing.map(m => m.name).join(', ');
       throw new Error(`Missing required environment variables: ${missingNames}`);
     }
+
+    // In production, refuse to start with a missing or default JWT secret.
+    if (this.isProduction) {
+      if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret-change-in-production') {
+        throw new Error('JWT_SECRET must be set to a strong unique value in production');
+      }
+      if (!process.env.ENCRYPTION_KEY) {
+        throw new Error('ENCRYPTION_KEY must be set in production (openssl rand -hex 32)');
+      }
+    }
   }
 
   // Get all config as object (for debugging)

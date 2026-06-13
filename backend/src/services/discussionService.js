@@ -127,6 +127,37 @@ class DiscussionService {
     }
   }
 
+  // Get messages older than a given message (for pagination).
+  // Uses _id ordering — ObjectIds are monotonically increasing.
+  async getMessagesBefore(discussionId, beforeMessageId, limit = 50) {
+    try {
+      const query = { discussionId };
+      if (beforeMessageId) {
+        query._id = { $lt: beforeMessageId };
+      }
+
+      const messages = await Message.find(query)
+        .sort({ _id: -1 })
+        .limit(limit)
+        .lean();
+
+      const Decision = (await import('../models/Decision.js')).default;
+      const messageIds = messages.map(m => m._id);
+      const decisions = await Decision.find({ sourceMessageId: { $in: messageIds } })
+        .select('sourceMessageId').lean();
+      const savedMessageIds = new Set(decisions.map(d => String(d.sourceMessageId)));
+
+      // Chronological order (oldest first)
+      return messages.reverse().map(m => ({
+        ...m,
+        isSaved: savedMessageIds.has(String(m._id))
+      }));
+    } catch (error) {
+      console.error('Error getting paginated messages:', error);
+      return [];
+    }
+  }
+
   // Add message to discussion
   async addMessage(discussionId, projectId, userId, username, text, isAI = false) {
     try {

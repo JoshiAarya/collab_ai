@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import authService from '../services/authService.js';
 import emailService from '../services/emailService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -8,8 +9,18 @@ import logger from '../utils/logger.js';
 
 const router = express.Router();
 
+// Brute-force protection for credential endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many attempts. Please try again later.' }
+});
+
 // Register
-router.post('/register', 
+router.post('/register',
+  authLimiter,
   validate('register'),
   asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
@@ -26,6 +37,7 @@ router.post('/register',
 
 // Login
 router.post('/login',
+  authLimiter,
   validate('login'),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -98,35 +110,35 @@ router.get('/google/callback', asyncHandler(async (req, res) => {
   // Authenticate or create user
   const result = await authService.googleAuth(userInfo.id, userInfo.email, userInfo.name);
 
-  // Redirect to frontend with token
+  // Redirect to frontend with token in the URL fragment — fragments are not
+  // sent to servers, so the token stays out of access logs and referrers.
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-  res.redirect(`${frontendUrl}?token=${result.token}&provider=google`);
+  res.redirect(`${frontendUrl}#token=${encodeURIComponent(result.token)}&provider=google`);
 }));
 
 // Google OAuth - Direct (for mobile/SPA with Google Sign-In button)
-router.post('/google', asyncHandler(async (req, res) => {
-  const { idToken, googleId, email, username } = req.body;
+// Only a verified Google ID token is accepted — unverified credentials
+// would allow anyone to mint a session as an arbitrary OAuth user.
+router.post('/google', authLimiter, asyncHandler(async (req, res) => {
+  const { idToken } = req.body;
 
-  // Support both ID token verification and direct credentials
-  if (idToken) {
-    // Verify Google ID token
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    const userInfo = await response.json();
-
-    if (userInfo.error) {
-      throw new ValidationError('Invalid Google ID token');
-    }
-
-    const result = await authService.googleAuth(userInfo.sub, userInfo.email, userInfo.name);
-    return res.json({ success: true, ...result });
+  if (!idToken) {
+    throw new ValidationError('Google ID token required');
   }
 
-  // Fallback to direct credentials (for testing)
-  if (!googleId || !email) {
-    throw new ValidationError('Google ID and email required');
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+  const userInfo = await response.json();
+
+  if (userInfo.error || !userInfo.sub) {
+    throw new ValidationError('Invalid Google ID token');
   }
 
-  const result = await authService.googleAuth(googleId, email, username);
+  // Token must have been issued for this app
+  if (process.env.GOOGLE_CLIENT_ID && userInfo.aud !== process.env.GOOGLE_CLIENT_ID) {
+    throw new ValidationError('Invalid Google ID token');
+  }
+
+  const result = await authService.googleAuth(userInfo.sub, userInfo.email, userInfo.name);
   res.json({ success: true, ...result });
 }));
 

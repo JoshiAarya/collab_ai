@@ -28,8 +28,8 @@ RUN npm ci
 COPY frontend/ ./
 
 # Build args for production URLs
-ARG VITE_API_BASE_URL=https://collab-ai-j39n.onrender.com
-ARG VITE_WS_BASE_URL=wss://collab-ai-j39n.onrender.com
+ARG VITE_API_BASE_URL=
+ARG VITE_WS_BASE_URL=
 
 # Build frontend
 RUN npm run build

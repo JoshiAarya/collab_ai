@@ -8,6 +8,12 @@ import MessageEmbedding from '../../models/MessageEmbedding.js';
 import Decision from '../../models/Decision.js';
 import logger from '../../utils/logger.js';
 
+// Similarity is computed in-process, so candidate sets must be bounded —
+// otherwise memory and latency grow linearly with project history.
+const MAX_MESSAGE_CANDIDATES = 2000;  // most recent messages
+const MAX_CHUNK_CANDIDATES = 2000;    // document chunks
+const MAX_DECISION_CANDIDATES = 500;  // most recent decisions
+
 class VectorStore {
   constructor() {
     this.dimension = 384; // all-MiniLM-L6-v2 dimensions
@@ -24,8 +30,9 @@ class VectorStore {
         throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
       }
 
-      // Fetch all chunks for the project
-      const chunks = await DocumentChunk.find({ projectId }).lean();
+      const chunks = await DocumentChunk.find({ projectId })
+        .limit(MAX_CHUNK_CANDIDATES)
+        .lean();
 
       if (chunks.length === 0) {
         logger.debug('No document chunks found for project', { projectId });
@@ -88,8 +95,11 @@ class VectorStore {
         throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
       }
 
-      // Fetch all message embeddings for the project
-      const messages = await MessageEmbedding.find({ projectId }).lean();
+      // Most recent N — bounded so per-request cost doesn't grow with history
+      const messages = await MessageEmbedding.find({ projectId })
+        .sort({ timestamp: -1 })
+        .limit(MAX_MESSAGE_CANDIDATES)
+        .lean();
 
       if (messages.length === 0) {
         logger.debug('No message embeddings found for project', { projectId });
@@ -152,12 +162,15 @@ class VectorStore {
         throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
       }
 
-      // Fetch only decisions that have embeddings
+      // Fetch only decisions that have embeddings (most recent N)
       const decisions = await Decision.find({
         projectId,
         embeddingStatus: 'done',
         embedding: { $exists: true, $ne: [] }
-      }).lean();
+      })
+        .sort({ timestamp: -1 })
+        .limit(MAX_DECISION_CANDIDATES)
+        .lean();
 
       if (decisions.length === 0) {
         logger.debug('No embedded decisions found for project', { projectId });
