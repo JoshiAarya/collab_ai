@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import apiRequest from '../../utils/api.js';
 import styles from './workspaceStyles';
 
@@ -62,7 +63,7 @@ export default function Summaries({ project, discussion, onClose, token, colors 
 
   const regenerateSummary = async (summaryId) => {
     if (!customPrompt.trim()) {
-      alert('Please enter refinement instructions');
+      toast.warning('Please enter refinement instructions');
       return;
     }
 

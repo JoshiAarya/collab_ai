@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Sidebar from './Sidebar';
 import { getAvatarColor, getInitials } from '../utils/avatarColors';
+import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
 
 export default function ProjectList({ onSelectProject }) {
@@ -185,7 +186,7 @@ function CreateProjectModal({ token, colors, onClose, onCreated }) {
 
   const handleSendInviteEmail = async () => {
     if (!emailInput.trim()) {
-      alert('Please enter an email address');
+      toast.warning('Please enter an email address');
       return;
     }
 
@@ -206,14 +207,14 @@ function CreateProjectModal({ token, colors, onClose, onCreated }) {
       const data = await response.json();
       
       if (data.success) {
-        alert(`Invitation sent to ${emailInput}!`);
+        toast.success(`Invitation sent to ${emailInput}!`);
         setEmailInput('');
       } else {
-        alert(data.error || 'Failed to send invitation');
+        toast.error(data.error || 'Failed to send invitation');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Failed to send invitation. Please try again.');
+      toast.error('Failed to send invitation. Please try again.');
     } finally {
       setSendingEmail(false);
     }

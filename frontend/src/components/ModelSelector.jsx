@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IoSettingsOutline } from 'react-icons/io5';
 import { MdChevronRight } from 'react-icons/md';
+import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
 
 const PROVIDERS = {
@@ -161,13 +162,13 @@ export default function ModelSelector({ currentModel, onModelChange, projectId, 
         setShowApiKeyModal(false);
         setApiKey('');
         setApiKeyProvider(null);
-        alert('API key saved successfully!');
+        toast.success('API key saved successfully!');
       } else {
-        alert('Failed to save API key');
+        toast.error('Failed to save API key');
       }
     } catch (error) {
       console.error('Error saving API key:', error);
-      alert('Error saving API key');
+      toast.error('Error saving API key');
     } finally {
       setIsSubmitting(false);
     }

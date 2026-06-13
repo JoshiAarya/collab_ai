@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
 
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
@@ -86,7 +87,7 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
       if (data.success) {
         setter(prev => prev.filter(item => item._id !== id));
       } else {
-        alert(data.error || `Failed to delete ${label}`);
+        toast.error(data.error || `Failed to delete ${label}`);
       }
     } catch (e) {
       console.error(`Delete ${label} error:`, e);

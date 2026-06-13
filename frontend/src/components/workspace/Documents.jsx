@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import apiRequest from '../../utils/api.js';
 import styles from './workspaceStyles';
 
@@ -19,11 +20,11 @@ export default function Documents({ project, onClose, token, colors }) {
       if (data.success) {
         setDocuments(prev => prev.filter(d => d._id !== doc._id));
       } else {
-        alert(data.error || 'Failed to delete document');
+        toast.error(data.error || 'Failed to delete document');
       }
     } catch (error) {
       console.error('Error deleting document:', error);
-      alert('Failed to delete document. Please try again.');
+      toast.error('Failed to delete document. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -55,7 +56,7 @@ export default function Documents({ project, onClose, token, colors }) {
     // Check for duplicate
     const isDuplicate = documents.some(doc => doc.title === file.name);
     if (isDuplicate) {
-      alert(`A document named "${file.name}" already exists. Please rename the file or delete the existing document first.`);
+      toast.warning(`A document named "${file.name}" already exists. Please rename the file or delete the existing document first.`);
       e.target.value = ''; // Reset file input
       return;
     }
@@ -85,11 +86,11 @@ export default function Documents({ project, onClose, token, colors }) {
         if (data.success) {
           loadDocuments();
         } else {
-          alert(`Upload failed: ${data.error}`);
+          toast.error(`Upload failed: ${data.error}`);
         }
       } catch (error) {
         console.error('Error uploading document:', error);
-        alert('Failed to upload document. Please try again.');
+        toast.error('Failed to upload document. Please try again.');
       } finally {
         setUploading(false);
         e.target.value = ''; // Reset file input

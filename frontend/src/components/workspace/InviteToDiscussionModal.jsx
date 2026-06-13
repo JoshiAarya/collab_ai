@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import apiRequest from '../../utils/api.js';
 import { getAvatarColor, getInitials } from '../../utils/avatarColors';
 import styles from './workspaceStyles';
@@ -78,7 +79,7 @@ export default function InviteToDiscussionModal({ project, discussionId, token, 
 
   const handleSendEmail = async () => {
     if (!emailInput.trim()) {
-      alert('Please enter an email address');
+      toast.warning('Please enter an email address');
       return;
     }
 
@@ -102,14 +103,14 @@ export default function InviteToDiscussionModal({ project, discussionId, token, 
       const data = await response.json();
       
       if (data.success) {
-        alert(`Invitation sent to ${emailInput}!`);
+        toast.success(`Invitation sent to ${emailInput}!`);
         setEmailInput('');
       } else {
-        alert(data.error || 'Failed to send invitation');
+        toast.error(data.error || 'Failed to send invitation');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Failed to send invitation. Please try again.');
+      toast.error('Failed to send invitation. Please try again.');
     } finally {
       setSendingEmail(false);
     }

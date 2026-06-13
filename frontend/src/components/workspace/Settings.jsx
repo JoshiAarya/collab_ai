@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 import apiRequest from '../../utils/api.js';
 import { getAvatarColor, getInitials } from '../../utils/avatarColors';
 import styles from './workspaceStyles';
@@ -25,11 +26,11 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
           (m.userId?._id || m.userId) !== (member.userId?._id || member.userId)
         ));
       } else {
-        alert(data.error || 'Failed to remove member');
+        toast.error(data.error || 'Failed to remove member');
       }
     } catch (error) {
       console.error('Error removing member:', error);
-      alert('Failed to remove member. Please try again.');
+      toast.error('Failed to remove member. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -47,12 +48,12 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
       if (data.success) {
         onProjectGone();
       } else {
-        alert(data.error || 'Failed to leave project');
+        toast.error(data.error || 'Failed to leave project');
         setBusy(false);
       }
     } catch (error) {
       console.error('Error leaving project:', error);
-      alert('Failed to leave project. Please try again.');
+      toast.error('Failed to leave project. Please try again.');
       setBusy(false);
     }
   };
@@ -69,12 +70,12 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
       if (data.success) {
         onProjectGone();
       } else {
-        alert(data.error || 'Failed to delete project');
+        toast.error(data.error || 'Failed to delete project');
         setBusy(false);
       }
     } catch (error) {
       console.error('Error deleting project:', error);
-      alert('Failed to delete project. Please try again.');
+      toast.error('Failed to delete project. Please try again.');
       setBusy(false);
     }
   };
@@ -88,7 +89,7 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
 
   const handleSendInviteEmail = async () => {
     if (!emailInput.trim()) {
-      alert('Please enter an email address');
+      toast.warning('Please enter an email address');
       return;
     }
 
@@ -109,14 +110,14 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
       const data = await response.json();
       
       if (data.success) {
-        alert(`Invitation sent to ${emailInput}!`);
+        toast.success(`Invitation sent to ${emailInput}!`);
         setEmailInput('');
       } else {
-        alert(data.error || 'Failed to send invitation');
+        toast.error(data.error || 'Failed to send invitation');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Failed to send invitation. Please try again.');
+      toast.error('Failed to send invitation. Please try again.');
     } finally {
       setSendingEmail(false);
     }
