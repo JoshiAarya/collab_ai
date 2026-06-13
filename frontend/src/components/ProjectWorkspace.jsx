@@ -1014,7 +1014,7 @@ export default function ProjectWorkspace({ project, onBack }) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                   },
-                  body: JSON.stringify({ name })
+                  body: JSON.stringify({ title: name })
                 }
               );
               const data = await response.json();
