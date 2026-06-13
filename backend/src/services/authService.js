@@ -78,25 +78,33 @@ class AuthService {
     }
   }
 
-  // Google OAuth (stubbed for MVP)
+  // Google OAuth
   async googleAuth(googleId, email, username) {
     try {
+      const normalizedEmail = email.toLowerCase().trim();
       let user = await User.findOne({ googleId });
 
       if (!user) {
-        user = new User({
-          username: username || email.split('@')[0],
-          email: email.toLowerCase().trim(),
-          googleId,
-          authProvider: 'google',
-          isOnline: true
-        });
-        await user.save();
-      } else {
-        user.isOnline = true;
-        user.lastSeen = new Date();
-        await user.save();
+        // No account linked to this Google ID yet. If one already exists with
+        // the same email (e.g. a prior email/password signup), link Google to
+        // it instead of creating a duplicate; Google verifies the email, so
+        // this is a safe account-linking by address.
+        user = await User.findOne({ email: normalizedEmail });
+        if (user) {
+          user.googleId = googleId;
+        } else {
+          user = new User({
+            username: username || normalizedEmail.split('@')[0],
+            email: normalizedEmail,
+            googleId,
+            authProvider: 'google'
+          });
+        }
       }
+
+      user.isOnline = true;
+      user.lastSeen = new Date();
+      await user.save();
 
       const token = this.generateToken(user);
 
