@@ -231,6 +231,9 @@ class ConnectionManager {
   /**
    * Handle project chat message
    */
+  /**
+   * Handle project chat message
+   */
   async handleProjectChat(ws, data) {
     const meta = this.clients.get(ws);
     const { text } = data;
@@ -287,11 +290,22 @@ class ConnectionManager {
         .then(({ default: pipeline }) => pipeline.onHumanMessage({ projectId, discussionId, text }))
         .catch(err => logger.warn('Intelligence pipeline trigger failed', { error: err.message }));
 
-      // Check for AI invocation
-      if (isAIMention(text)) {
-        const meta = this.clients.get(ws);
-        await this.handleAIInvocation(ws, text, projectId, discussionId, meta?.userId);
+      // --- BYOK: Fetch aliases and check for AI invocation ---
+      let userAliases = [];
+
+      if (meta?.userId) {
+        const User = (await import('../models/User.js')).default;
+        const userDoc = await User.findById(meta.userId).select('apiKeys').lean();
+        if (userDoc?.apiKeys) {
+          userAliases = userDoc.apiKeys.map(k => k.alias);
+        }
       }
+
+      // Pass the aliases into isAIMention
+      if (isAIMention(text, userAliases)) {
+        await this.handleAIInvocation(ws, text, projectId, discussionId, meta?.userId, userAliases);
+      }
+      // --------------------------------------------------------
 
     } catch (error) {
       logger.error('Error handling chat message', { 
@@ -301,12 +315,12 @@ class ConnectionManager {
       this.sendError(ws, 'Failed to send message');
     }
   }
-
   /**
    * Handle AI invocation
    */
-  async handleAIInvocation(ws, text, projectId, discussionId, userId = null) {
-    const prompt = stripAIMention(text);
+  async handleAIInvocation(ws, text, projectId, discussionId, userId = null, userAliases = []) 
+  {    
+    const prompt = stripAIMention(text, []);
     
     try {
       const project = await projectService.getProjectById(projectId);

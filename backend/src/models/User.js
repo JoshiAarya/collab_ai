@@ -26,6 +26,26 @@ const userSchema = new mongoose.Schema({
   googleId: {
     type: String
   },
+  
+  apiKeys: [{
+    alias: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true, // Forces "@myGpt" to "@mygpt" to make chat parsing easier
+      maxlength: 30
+    },
+    provider: {
+      type: String,
+      enum: ['openai', 'anthropic', 'google', 'deepseek', 'xai', 'custom'],
+      required: true
+    },
+    key: {
+      type: String,
+      required: true
+    }
+  }],
+
   // Profile fields
   bio: {
     type: String,

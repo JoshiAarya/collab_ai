@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import apiRequest from '../../utils/api.js';
 import { getAvatarColor, getInitials } from '../../utils/avatarColors';
@@ -10,6 +10,50 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
   const [sendingEmail, setSendingEmail] = useState(false);
   const [memberList, setMemberList] = useState(project.members || []);
   const [busy, setBusy] = useState(false);
+  // --- BYOK (Bring Your Own Key) State ---
+  const [userApiKeys, setUserApiKeys] = useState([]);
+  const [newAlias, setNewAlias] = useState('');
+  const [newProvider, setNewProvider] = useState('openai');
+  const [newApiKey, setNewApiKey] = useState('');
+  const [isSavingKey, setIsSavingKey] = useState(false);
+
+  // Fetch keys when settings open
+  useEffect(() => {
+    const fetchKeys = async () => {
+      try {
+        const res = await apiRequest('/api/user/me/api-keys', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) setUserApiKeys(data.apiKeys || []);
+      } catch (e) { console.error('Failed to load API keys', e); }
+    };
+    fetchKeys();
+  }, [token]);
+
+  const handleAddApiKey = async () => {
+    if (!newAlias.trim() || !newApiKey.trim()) {
+      toast.warning('Please provide both an alias and API key');
+      return;
+    }
+    setIsSavingKey(true);
+    try {
+      const response = await apiRequest('/api/user/me/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ alias: newAlias, provider: newProvider, key: newApiKey })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserApiKeys(prev => [...prev, data.newKey]);
+        setNewAlias(''); setNewApiKey('');
+        toast.success('API Key saved!');
+      } else {
+        toast.error(data.error || 'Failed to save key');
+      }
+    } catch (e) { toast.error('Error saving key', e); }
+    setIsSavingKey(false);
+  };
 
   const removeMember = async (member) => {
     const username = member.userId?.username || 'this member';
@@ -246,6 +290,62 @@ export default function Settings({ project, onClose, token, isOwner, colors, onP
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* --- NEW: Personal API Keys Section --- */}
+          <div style={styles.settingSection}>
+            <h3 style={{...styles.sectionTitle, color: colors.text}}>Personal API Keys & Aliases</h3>
+            <p style={{...styles.sectionDesc, color: colors.textSecondary}}>
+              Add your own API keys to call specific models in the chat using custom @ aliases.
+            </p>
+            
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              <select 
+                value={newProvider} 
+                onChange={(e) => setNewProvider(e.target.value)}
+                style={{ padding: '10px', background: colors.background, border: `1px solid ${colors.border}`, color: colors.text, borderRadius: '6px', outline: 'none' }}
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="xai">xAI</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Alias (e.g. mygpt)"
+                value={newAlias}
+                onChange={(e) => setNewAlias(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase())}
+                style={{ flex: 1, minWidth: '100px', padding: '10px', background: colors.background, border: `1px solid ${colors.border}`, color: colors.text, borderRadius: '6px', outline: 'none' }}
+              />
+              <input
+                type="password"
+                placeholder="sk-..."
+                value={newApiKey}
+                onChange={(e) => setNewApiKey(e.target.value)}
+                style={{ flex: 2, minWidth: '150px', padding: '10px', background: colors.background, border: `1px solid ${colors.border}`, color: colors.text, borderRadius: '6px', outline: 'none' }}
+              />
+              <button
+                onClick={handleAddApiKey}
+                disabled={isSavingKey}
+                style={{ padding: '10px 16px', background: '#10a37f', border: 'none', borderRadius: '6px', color: '#fff', cursor: isSavingKey ? 'not-allowed' : 'pointer', fontWeight: '600' }}
+              >
+                {isSavingKey ? 'Adding...' : 'Add Key'}
+              </button>
+            </div>
+
+            {/* List of active keys */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {userApiKeys.map((k, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: colors.background, border: `1px solid ${colors.border}`, borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ color: '#10a37f', fontWeight: '600' }}>@{k.alias}</span>
+                    <span style={{ color: colors.textSecondary, fontSize: '13px', textTransform: 'capitalize' }}>({k.provider})</span>
+                  </div>
+                  <span style={{ color: colors.textTertiary, fontSize: '12px', fontFamily: 'monospace' }}>••••{k.keyLast4 || 'xxxx'}</span>
+                </div>
+              ))}
             </div>
           </div>
 

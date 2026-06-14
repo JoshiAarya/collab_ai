@@ -137,4 +137,52 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get user's custom API keys (masking the real key for frontend security)
+router.get('/me/api-keys', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    // Only send the last 4 chars to the frontend
+    const safeKeys = (user.apiKeys || []).map(k => ({
+      alias: k.alias,
+      provider: k.provider,
+      keyLast4: k.key.slice(-4) 
+    }));
+    
+    res.json({ success: true, apiKeys: safeKeys });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save a new custom API key
+router.post('/me/api-keys', async (req, res) => {
+  try {
+    const { alias, provider, key } = req.body;
+    
+    if (!alias || !provider || !key) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    // Store as plain text
+    user.apiKeys.push({ alias, provider, key });
+    await user.save();
+
+    res.json({
+      success: true,
+      newKey: { alias, provider, keyLast4: key.slice(-4) }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
