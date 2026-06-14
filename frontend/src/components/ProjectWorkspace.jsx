@@ -40,6 +40,20 @@ export default function ProjectWorkspace({ project, onBack }) {
   const [showInviteToDiscussion, setShowInviteToDiscussion] = useState(false);
   const [inviteDiscussionId, setInviteDiscussionId] = useState(null);
   const [currentModel, setCurrentModel] = useState(project.activeLLM || { provider: 'groq', model: 'llama-3.1-8b-instant' });
+  const [userApiKeys, setUserApiKeys] = useState([]);
+
+  useEffect(() => {
+    const fetchKeys = async () => {
+      try {
+        const res = await apiRequest('/api/user/me/api-keys', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) setUserApiKeys(data.apiKeys || []);
+      } catch (e) { console.error('Error fetching API keys', e); }
+    };
+    fetchKeys();
+  }, [token]);
   
   // State awareness
   const [isLoadingDiscussions, setIsLoadingDiscussions] = useState(true);
@@ -396,7 +410,9 @@ export default function ProjectWorkspace({ project, onBack }) {
     setIsSendingMessage(true);
     
     // Check if mentioning AI (case-insensitive, matching the backend trigger)
-    if (/^\s*@collabai\b/i.test(input)) {
+    const isCollabAI = /^\s*@collabai\b/i.test(input);
+    const isCustomAlias = userApiKeys.some(k => new RegExp(`^\\s*@${k.alias}\\b`, 'i').test(input));
+    if (isCollabAI || isCustomAlias) {
       setAiThinking(true);
     }
     
@@ -484,6 +500,16 @@ export default function ProjectWorkspace({ project, onBack }) {
     const options = [
       { name: 'CollabAI', username: '@CollabAI', type: 'ai' }
     ];
+
+    if (userApiKeys && userApiKeys.length > 0) {
+      userApiKeys.forEach(k => {
+        options.push({
+          name: `${k.provider.charAt(0).toUpperCase() + k.provider.slice(1)} Model`,
+          username: `@${k.alias}`,
+          type: 'ai' // Using 'ai' so it gets the green CollabAI avatar styling in the list
+        });
+      });
+    }
 
     // Add members if they exist and are populated
     if (project.members && Array.isArray(project.members)) {
@@ -723,7 +749,22 @@ export default function ProjectWorkspace({ project, onBack }) {
               token={token}
               colors={colors}
             />
-            <h2 style={{...styles.title, color: colors.text}}>{currentDiscussion?.title || project.title}</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <span style={{ 
+                fontSize: '12px', 
+                fontWeight: '600', 
+                color: colors.textSecondary, 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.5px',
+                marginBottom: '2px'
+              }}>
+                {project.title}
+              </span>
+              <h2 style={{...styles.title, color: colors.text, margin: 0, lineHeight: '1.2'}}>
+                {currentDiscussion?.title || 'General'}
+              </h2>
+            </div>
+            {/* <h2 style={{...styles.title, color: colors.text}}>{currentDiscussion?.title || project.title}</h2> */}
           </div>
 
           <div style={styles.headerActions}>

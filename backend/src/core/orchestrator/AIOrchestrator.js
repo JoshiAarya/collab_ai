@@ -40,8 +40,30 @@ class AIOrchestrator {
    * Prepare context and messages for a request (shared by streaming and non-streaming)
    */
   async _prepareRequest(params) {
-    const { projectId, discussionId, prompt, llmConfig, userId } = params;
+    let { projectId, discussionId, prompt, llmConfig, userId } = params;
     const requestId = randomUUID();
+
+    let customKeyToUse = null;
+    if (userId) {
+      try {
+        const User = (await import('../../models/User.js')).default;
+        // Lean is faster, just grab the apiKeys array
+        const user = await User.findById(userId).select('apiKeys').lean(); 
+        if (user && user.apiKeys?.length > 0) {
+          for (const k of user.apiKeys) {
+            // Check if prompt starts with their @alias
+            const aliasRegex = new RegExp(`^\\s*@${k.alias}\\b`, 'i');
+            if (aliasRegex.test(prompt)) {
+              customKeyToUse = k;
+              prompt = prompt.replace(aliasRegex, '').trim();
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch user API keys', { error: err.message });
+      }
+    }
 
     logger.ai('Orchestrator received request', {
       requestId, projectId, discussionId, provider: llmConfig.provider, model: llmConfig.model, promptLength: prompt.length
@@ -51,13 +73,28 @@ class AIOrchestrator {
       RateLimiter.checkLimits(userId, projectId);
     }
 
-    const selectedModel = this.selectModel(llmConfig);
+    let selectedModel = this.selectModel(llmConfig);
+    if (customKeyToUse) {
+      // Map providers to their fastest/standard models for ad-hoc chat
+      const BYOK_DEFAULTS = {
+        'openai': 'gpt-4o-mini',
+        'anthropic': 'claude-3-5-haiku-latest',
+        'google': 'gemini-2.5-flash', // <--- EXACTLY THIS
+        'deepseek': 'deepseek-chat',
+        'xai': 'grok-2'
+      };
+      selectedModel = {
+        provider: customKeyToUse.provider,
+        model: BYOK_DEFAULTS[customKeyToUse.provider] || 'default-model'
+      };
+    }
+
     const isCatchMeUp = /catch me up|what's the current state|what have we decided|summarize the project|onboard me/i.test(prompt);
     const context = await this.buildProjectContext({ projectId, discussionId, prompt });
 
     let systemPrompt = null;
     if (isCatchMeUp) {
-      const contextPrompt = this.buildSystemPrompt(context);
+      const contextPrompt = this.buildSystemPrompt(context, customKeyToUse);
       systemPrompt = contextPrompt + `\n## Your Task\nYou are onboarding a team member. Using ALL the project context above, give a structured summary covering:\n1. **What's being built** — from the project description\n2. **Key decisions made** — from the Verified Ground Truth section above\n3. **Current work & discussions** — from parallel discussions and recent messages\n4. **Unresolved items** — anything still open or debated\n\nBe clear, concise, and professional. Only reference information that appears in the context above.`;
     } else {
       systemPrompt = this.buildSystemPrompt(context);
@@ -67,13 +104,13 @@ class AIOrchestrator {
     const { messages: trimmedMessages } = TokenManager.trimContext(context, messages, selectedModel.model, requestId);
     messages = trimmedMessages;
 
-    return { requestId, selectedModel, context, messages, systemPrompt };
+    return { requestId, selectedModel, context, messages, systemPrompt, customKeyToUse };
   }
 
   async handleRequest(params) {
     const { projectId, userId } = params;
     try {
-      const { requestId, selectedModel, context, messages } = await this._prepareRequest(params);
+      const { requestId, selectedModel, context, messages, customKeyToUse } = await this._prepareRequest(params);
 
       const response = await this.callProvider({
         requestId,
@@ -85,7 +122,8 @@ class AIOrchestrator {
         messagesOverride: messages,
         projectId,
         userId,
-        maxTokens: 1024
+        maxTokens: 1024,
+        customApiKey: customKeyToUse ? customKeyToUse.key : null
       });
 
       logger.ai('Response generated', { requestId, provider: selectedModel.provider, responseLength: response.length });
@@ -106,10 +144,10 @@ class AIOrchestrator {
   async handleStreamingRequest(params, onChunk) {
     const { projectId, userId } = params;
     try {
-      const { requestId, selectedModel, messages } = await this._prepareRequest(params);
+      const { requestId, selectedModel, messages, customKeyToUse } = await this._prepareRequest(params);
       const provider = selectedModel.provider;
       const model = selectedModel.model;
-      const apiKey = await this.getApiKey(provider, projectId);
+      const apiKey = customKeyToUse ? customKeyToUse.key : await this.getApiKey(provider, projectId);
       const maxTokens = 1024;
 
       const streamer = {
@@ -290,9 +328,17 @@ class AIOrchestrator {
     };
   }
 
-  buildSystemPrompt(context) {
-    let prompt = `You are CollabAI, a helpful AI assistant for team collaboration.
-Be conversational, concise, and natural. Use the project context below to give accurate, relevant responses.\n\n`;
+  buildSystemPrompt(context, customKeyToUse) {
+    let prompt = ''
+    if (customKeyToUse) {
+      // Capitalize the provider name (e.g., 'google' -> 'Google')
+      const providerName = customKeyToUse.provider.charAt(0).toUpperCase() + customKeyToUse.provider.slice(1);
+      prompt = `You are a helpful AI assistant powered by ${providerName}, called via the custom alias @${customKeyToUse.alias}. Be conversational, concise, and natural. Use the project context below to give accurate, relevant responses.\n\n`;
+    }
+    else{
+      prompt = `You are CollabAI, a helpful AI assistant for team collaboration.
+      Be conversational, concise, and natural. Use the project context below to give accurate, relevant responses.\n\n`;
+    }
 
     if (context.project) {
       prompt += `Project: ${context.project.title}\n`;
@@ -374,7 +420,8 @@ Be conversational, concise, and natural. Use the project context below to give a
     let { 
       requestId, provider, model, context, prompt, 
       messagesOverride, systemPrompt = null,
-      temperature = 0.7, maxTokens = null, projectId 
+      temperature = 0.7, maxTokens = null, projectId,
+      customApiKey
     } = params;
 
     if (provider === 'server' && model === 'server') {
@@ -524,6 +571,9 @@ Be conversational, concise, and natural. Use the project context below to give a
       userPrompt = `${systemMsg.content}\n\n${userPrompt}`;
     }
     const chat = geminiModel.startChat({ history });
+    console.log("📦 SENDING TO GEMINI (STANDARD):");
+    console.log("- Model:", model);
+    console.log("- User Prompt:", userPrompt);
     const result = await chat.sendMessageStream(userPrompt);
     let fullText = '';
     for await (const chunk of result.stream) {
