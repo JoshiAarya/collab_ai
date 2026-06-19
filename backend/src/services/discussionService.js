@@ -4,13 +4,17 @@ import '../models/User.js'; // ensure User schema is registered for populate('pa
 
 class DiscussionService {
   // Get project discussions
-  async getProjectDiscussions(projectId) {
+  async getProjectDiscussions(projectId, userId) {
     try {
       const discussions = await Discussion.find({ 
         projectId,
         $or: [
           { status: 'active' },
           { status: { $exists: false } } // Support old discussions without status field
+        ],
+        $or: [
+          { isPrivate: { $ne: true } },
+          { participants: userId }
         ]
       })
         .populate('participants', 'username email')
@@ -25,10 +29,10 @@ class DiscussionService {
   }
 
   // Create parallel discussion
-  async createDiscussion(projectId, title, description, creatorId, ownerId, parentDiscussionId = null) {
+  async createDiscussion(projectId, title, description, creatorId, ownerId, parentDiscussionId = null, isPrivate = false) {
     try {
       const participants = [creatorId];
-      if (ownerId && ownerId.toString() !== creatorId.toString()) {
+      if (!isPrivate && ownerId && ownerId.toString() !== creatorId.toString()) {
         participants.push(ownerId);
       }
 
@@ -46,6 +50,7 @@ class DiscussionService {
         title: title.trim(),
         description,
         isMain: false,
+        isPrivate,
         participants,
         creatorId,
         parentDiscussionId,
@@ -159,7 +164,7 @@ class DiscussionService {
   }
 
   // Add message to discussion
-  async addMessage(discussionId, projectId, userId, username, text, isAI = false) {
+  async addMessage(discussionId, projectId, userId, username, text, isAI = false, sources = null) {
     try {
       const message = new Message({
         discussionId,
@@ -168,7 +173,8 @@ class DiscussionService {
         user: username,
         text,
         timestamp: Date.now(),
-        isAI
+        isAI,
+        sources
       });
 
       await message.save();

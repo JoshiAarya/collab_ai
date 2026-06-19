@@ -1,6 +1,6 @@
 import Summary from '../models/Summary.js';
-
 import Message from '../models/Message.js';
+import EmbeddingService from '../core/embeddings/EmbeddingService.js';
 
 class SummaryService {
   // Create summary
@@ -27,6 +27,12 @@ class SummaryService {
       });
 
       await summary.save();
+
+      // Trigger embedding asynchronously
+      this._embedSummaryAsync(summary).catch(err => 
+        console.error('Failed to trigger background embedding for summary:', err)
+      );
+
       return summary;
     } catch (error) {
       console.error('Error creating summary:', error);
@@ -97,9 +103,16 @@ class SummaryService {
     try {
       const summary = await Summary.findByIdAndUpdate(
         summaryId,
-        { content: newContent },
+        { content: newContent, embeddingStatus: 'pending' },
         { new: true }
       ).lean();
+
+      if (summary) {
+        this._embedSummaryAsync(summary).catch(err => 
+          console.error('Failed to trigger background embedding for updated summary:', err)
+        );
+      }
+
       return summary;
     } catch (error) {
       console.error('Error updating summary:', error);
@@ -114,7 +127,29 @@ class SummaryService {
       return true;
     } catch (error) {
       console.error('Error deleting summary:', error);
-      throw error;
+      return false;
+    }
+  }
+
+  // Internal helper to embed a summary asynchronously
+  async _embedSummaryAsync(summary) {
+    try {
+      const embedding = await EmbeddingService.embedText(summary.content);
+      if (embedding) {
+        await Summary.findByIdAndUpdate(summary._id, {
+          embedding,
+          embeddingStatus: 'done'
+        });
+      } else {
+        await Summary.findByIdAndUpdate(summary._id, {
+          embeddingStatus: 'failed'
+        });
+      }
+    } catch (error) {
+      console.error(`Error embedding summary ${summary._id}:`, error);
+      await Summary.findByIdAndUpdate(summary._id, {
+        embeddingStatus: 'failed'
+      });
     }
   }
 }

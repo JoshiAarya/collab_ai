@@ -5,6 +5,7 @@ import discussionService from '../services/discussionService.js';
 import documentService from '../services/documentService.js';
 import summaryService from '../services/summaryService.js';
 import aiService from '../services/aiService.js';
+import briefService from '../services/briefService.js';
 import Decision from '../models/Decision.js';
 import crypto from 'crypto';
 import connectionManager from '../services/connectionManager.js';
@@ -78,16 +79,19 @@ router.post('/join', validate('joinProject'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invite code required' });
     }
 
+    // Check if user was already a member BEFORE joining
+    const ProjectModel = (await import('../models/Project.js')).default;
+    const projectToCheck = await ProjectModel.findOne({ inviteCode }).select('_id members').lean();
+    if (!projectToCheck) {
+      return res.status(404).json({ success: false, error: 'Invalid invite code' });
+    }
+    const alreadyMember = projectToCheck.members.some(
+      m => m.userId.toString() === req.user.userId.toString()
+    );
+
     const project = await projectService.joinProject(inviteCode, req.user.userId);
     
-    let alreadyMember = false;
     let addedToDiscussion = false;
-    
-    // Check if user was already a member
-    const isMember = await projectService.isProjectMember(project._id, req.user.userId);
-    if (isMember) {
-      alreadyMember = true;
-    }
     
     // If discussionId is provided, also join that specific discussion —
     // but only if it belongs to the project the invite code is for.
@@ -247,10 +251,10 @@ router.put('/:projectId/llm', validate('updateLLM'), async (req, res) => {
     const { projectId } = req.params;
     const { activeLLM } = req.body;
 
-    // Check if owner
-    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
-    if (!isOwner) {
-      return res.status(403).json({ success: false, error: 'Only owner can update LLM' });
+    // Check if member (any member can change the active LLM under the hybrid model)
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Only project members can update LLM configuration' });
     }
 
     const project = await projectService.updateProject(projectId, { activeLLM });
@@ -284,6 +288,63 @@ router.post('/:projectId/api-key', async (req, res) => {
   }
 });
 
+// Get project's custom API keys configuration (booleans indicating if key exists)
+router.get('/:projectId/api-keys', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // Check if owner
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Only owner can view API key configuration' });
+    }
+
+    const ProjectModel = (await import('../models/Project.js')).default;
+    const project = await ProjectModel.findById(projectId).select('+apiKeys');
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const config = {};
+    const providers = ['openai', 'anthropic', 'google', 'deepseek', 'xai'];
+    providers.forEach(p => {
+      config[p] = project.apiKeys && typeof project.apiKeys.has === 'function' ? project.apiKeys.has(p) : false;
+    });
+
+    res.json({ success: true, apiKeys: config });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a project custom API key
+router.delete('/:projectId/api-key/:provider', async (req, res) => {
+  try {
+    const { projectId, provider } = req.params;
+
+    // Check if owner
+    const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Only owner can delete API keys' });
+    }
+
+    const ProjectModel = (await import('../models/Project.js')).default;
+    const project = await ProjectModel.findById(projectId).select('+apiKeys');
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    if (project.apiKeys && typeof project.apiKeys.has === 'function' && project.apiKeys.has(provider)) {
+      project.apiKeys.delete(provider);
+      await project.save();
+    }
+
+    res.json({ success: true, message: 'API key deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 // Get project discussions
 router.get('/:projectId/discussions', async (req, res) => {
   try {
@@ -294,7 +355,7 @@ router.get('/:projectId/discussions', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not a project member' });
     }
 
-    const discussions = await discussionService.getProjectDiscussions(projectId);
+    const discussions = await discussionService.getProjectDiscussions(projectId, req.user.userId);
 
     // Attach latest summary metadata to each non-main discussion so the
     // frontend can show stale indicators without extra round-trips.
@@ -322,7 +383,7 @@ router.get('/:projectId/discussions', async (req, res) => {
 router.post('/:projectId/discussions', validate('createDiscussion'), async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { title, description } = req.body;
+    const { title, description, isPrivate } = req.body;
     const name = title || req.body.name; // Fallback for backwards compatibility
 
     const isMember = await projectService.isProjectMember(projectId, req.user.userId);
@@ -338,7 +399,9 @@ router.post('/:projectId/discussions', validate('createDiscussion'), async (req,
       name || 'New Discussion',
       description,
       req.user.userId,
-      project.ownerId
+      project.ownerId,
+      null, // parentDiscussionId
+      isPrivate === true
     );
 
     res.json({ success: true, discussion });
@@ -364,6 +427,17 @@ router.get('/:projectId/discussions/:discussionId/messages', async (req, res) =>
       return res.status(404).json({ success: false, error: 'Discussion not found' });
     }
 
+    // Check private discussion access
+    if (discussion.isPrivate) {
+      const isParticipant = discussion.participants.some(p => {
+        const pId = p._id ? p._id.toString() : p.toString();
+        return pId === req.user.userId.toString();
+      });
+      if (!isParticipant) {
+        return res.status(403).json({ success: false, error: 'Access denied to this private discussion' });
+      }
+    }
+
     const messages = await discussionService.getMessagesBefore(discussionId, before, limit);
     res.json({ success: true, messages, hasMore: messages.length === limit });
   } catch (error) {
@@ -385,11 +459,13 @@ router.post('/:projectId/discussions/:discussionId/invite', async (req, res) => 
 
     // Check if requester is project owner OR discussion participant
     const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
-    const isParticipant = discussion.participants.some(
-      p => p.toString() === req.user.userId.toString()
-    );
+    const isParticipant = discussion.participants.some(p => {
+      const pId = p._id ? p._id.toString() : p.toString();
+      return pId === req.user.userId.toString();
+    });
 
-    if (!isOwner && !isParticipant) {
+    const isAuthorized = discussion.isPrivate ? isParticipant : (isOwner || isParticipant);
+    if (!isAuthorized) {
       return res.status(403).json({ success: false, error: 'Not authorized to invite members' });
     }
 
@@ -426,11 +502,13 @@ router.post('/:projectId/discussions/:discussionId/invite-email', async (req, re
 
     // Check if requester is project owner OR discussion participant
     const isOwner = await projectService.isProjectOwner(projectId, req.user.userId);
-    const isParticipant = discussion.participants.some(
-      p => p.toString() === req.user.userId.toString()
-    );
+    const isParticipant = discussion.participants.some(p => {
+      const pId = p._id ? p._id.toString() : p.toString();
+      return pId === req.user.userId.toString();
+    });
 
-    if (!isOwner && !isParticipant) {
+    const isAuthorized = discussion.isPrivate ? isParticipant : (isOwner || isParticipant);
+    if (!isAuthorized) {
       return res.status(403).json({ success: false, error: 'Not authorized to send invites' });
     }
 
@@ -599,6 +677,18 @@ router.post('/:projectId/discussions/:discussionId/summarize', async (req, res) 
     if (!discussion) {
       return res.status(404).json({ success: false, error: 'Discussion not found' });
     }
+
+    // Check private discussion access
+    if (discussion.isPrivate) {
+      const isParticipant = discussion.participants.some(p => {
+        const pId = p._id ? p._id.toString() : p.toString();
+        return pId === req.user.userId.toString();
+      });
+      if (!isParticipant) {
+        return res.status(403).json({ success: false, error: 'Access denied to this private discussion' });
+      }
+    }
+
     if (discussion.isMain) {
       return res.status(400).json({ success: false, error: 'Cannot summarize the main thread' });
     }
@@ -994,6 +1084,37 @@ router.delete('/:projectId', async (req, res) => {
 
     await projectService.deleteProject(projectId);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Project Brief Routes
+router.get('/:projectId/brief', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const brief = await briefService.getOrGenerateBrief(projectId);
+    res.json({ success: true, brief });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:projectId/brief/generate', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const isMember = await projectService.isProjectMember(projectId, req.user.userId);
+    if (!isMember) {
+      return res.status(403).json({ success: false, error: 'Not a project member' });
+    }
+
+    const brief = await briefService.generateBrief(projectId);
+    res.json({ success: true, brief });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

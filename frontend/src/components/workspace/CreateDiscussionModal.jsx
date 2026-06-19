@@ -3,6 +3,7 @@ import styles from './workspaceStyles';
 
 export default function CreateDiscussionModal({ onClose, onCreate, colors }) {
   const [name, setName] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -24,10 +25,40 @@ export default function CreateDiscussionModal({ onClose, onCreate, colors }) {
             style={{...styles.modalInput, background: colors.background, border: `1px solid ${colors.border}`, color: colors.text}}
             autoFocus
           />
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '16px 0 20px 0' }}>
+            <input
+              type="checkbox"
+              id="isPrivateDiscussion"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                accentColor: colors.primary,
+                cursor: 'pointer'
+              }}
+            />
+            <label 
+              htmlFor="isPrivateDiscussion" 
+              style={{
+                fontSize: '14px',
+                color: colors.textSecondary,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                userSelect: 'none'
+              }}
+            >
+              🔒 Make this a private discussion
+            </label>
+          </div>
+
           <div style={styles.modalActions}>
             <button onClick={onClose} style={{...styles.modalCancel, border: `1px solid ${colors.border}`, color: colors.text}}>Cancel</button>
             <button 
-              onClick={() => name.trim() && onCreate(name.trim())} 
+              onClick={() => name.trim() && onCreate(name.trim(), isPrivate)} 
               style={styles.modalSubmit}
               disabled={!name.trim()}
             >

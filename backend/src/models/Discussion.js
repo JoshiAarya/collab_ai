@@ -51,6 +51,10 @@ const discussionSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'archived'],
     default: 'active'
+  },
+  isPrivate: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

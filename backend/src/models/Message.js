@@ -38,6 +38,10 @@ const messageSchema = new mongoose.Schema({
   isAI: {
     type: Boolean,
     default: false
+  },
+  sources: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 }, {
   timestamps: true // Adds createdAt and updatedAt automatically

@@ -757,8 +757,9 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
-    padding: '20px'
+    zIndex: 9999,
+    padding: '20px',
+    boxSizing: 'border-box'
   },
   modal: {
     borderRadius: '12px',
@@ -766,7 +767,8 @@ const styles = {
     width: '100%',
     maxHeight: '90vh',
     overflow: 'auto',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    boxSizing: 'border-box'
   },
   modalHeader: {
     display: 'flex',

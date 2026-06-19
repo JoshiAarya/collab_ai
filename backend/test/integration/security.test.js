@@ -100,6 +100,14 @@ describe('project membership boundaries', () => {
       .set(auth(bob))
       .send({ inviteCode: p1.inviteCode });
     expect(join.body.success).toBe(true);
+    expect(join.body.alreadyMember).toBe(false);
+
+    // Joining again should show alreadyMember: true
+    const joinAgain = await request(app).post('/api/projects/join')
+      .set(auth(bob))
+      .send({ inviteCode: p1.inviteCode });
+    expect(joinAgain.body.success).toBe(true);
+    expect(joinAgain.body.alreadyMember).toBe(true);
 
     const res = await request(app).get(`/api/projects/${p1._id}`).set(auth(bob));
     expect(res.status).toBe(200);

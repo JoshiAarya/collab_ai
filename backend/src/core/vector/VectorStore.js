@@ -6,6 +6,7 @@
 import DocumentChunk from '../../models/DocumentChunk.js';
 import MessageEmbedding from '../../models/MessageEmbedding.js';
 import Decision from '../../models/Decision.js';
+import Summary from '../../models/Summary.js';
 import logger from '../../utils/logger.js';
 
 // Similarity is computed in-process, so candidate sets must be bounded —
@@ -85,9 +86,9 @@ class VectorStore {
   }
 
   /**
-   * Search for semantically similar messages
+   * Search for semantically similar messages with hybrid discussion-filtering
    */
-  async searchMessages(projectId, queryEmbedding, topK = 5) {
+  async searchMessages(projectId, queryEmbedding, topK = 15, currentDiscussionId = null) {
     const startTime = Date.now();
 
     try {
@@ -126,8 +127,32 @@ class VectorStore {
         };
       });
 
-      results.sort((a, b) => b.similarity - a.similarity);
-      const topResults = results.slice(0, topK);
+      let topResults = [];
+      if (currentDiscussionId) {
+        // Hybrid Search: Filter by current discussion vs other discussions
+        const currentThread = [];
+        const otherThreads = [];
+
+        results.forEach(r => {
+          if (r.discussionId && r.discussionId.toString() === currentDiscussionId.toString()) {
+            currentThread.push(r);
+          } else {
+            otherThreads.push(r);
+          }
+        });
+
+        currentThread.sort((a, b) => b.similarity - a.similarity);
+        otherThreads.sort((a, b) => b.similarity - a.similarity);
+
+        topResults = [
+          ...currentThread.slice(0, topK),
+          ...otherThreads.slice(0, 5) // Hardcode 5 cross-thread context messages as per spec
+        ];
+      } else {
+        // Standard Semantic Search
+        results.sort((a, b) => b.similarity - a.similarity);
+        topResults = results.slice(0, topK);
+      }
 
       const duration = Date.now() - startTime;
 
@@ -135,6 +160,7 @@ class VectorStore {
         projectId,
         totalMessages: messages.length,
         topK,
+        currentDiscussionId: currentDiscussionId?.toString(),
         resultsFound: topResults.length,
         topSimilarity: topResults[0]?.similarity.toFixed(4),
         duration: `${duration}ms`
@@ -279,7 +305,67 @@ class VectorStore {
       return result.deletedCount;
     } catch (error) {
       logger.error('Error clearing chunks', { projectId, error: error.message });
-      return 0;
+      throw error;
+    }
+  }
+
+  /**
+   * Search for semantically similar summaries
+   */
+  async searchSummaries(projectId, queryEmbedding, topK = 3) {
+    const startTime = Date.now();
+
+    try {
+      if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== this.dimension) {
+        throw new Error(`Invalid query embedding dimension. Expected ${this.dimension}, got ${queryEmbedding?.length}`);
+      }
+
+      const summaries = await Summary.find({ 
+        projectId, 
+        embeddingStatus: 'done' 
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+      if (summaries.length === 0) {
+        logger.debug('No summary embeddings found for project', { projectId });
+        return [];
+      }
+
+      const results = summaries.map(sum => {
+        const similarity = this.cosineSimilarity(queryEmbedding, sum.embedding);
+        return {
+          id: sum._id,
+          discussionId: sum.discussionId,
+          content: sum.content,
+          title: sum.title || 'Summary',
+          createdAt: sum.createdAt,
+          similarity
+        };
+      });
+
+      results.sort((a, b) => b.similarity - a.similarity);
+      const topResults = results.slice(0, topK);
+
+      const duration = Date.now() - startTime;
+
+      logger.ai('Vector summary search completed', {
+        projectId,
+        totalSummaries: summaries.length,
+        topK,
+        resultsFound: topResults.length,
+        topSimilarity: topResults[0]?.similarity.toFixed(4),
+        duration: `${duration}ms`
+      });
+
+      return topResults;
+
+    } catch (error) {
+      logger.error('Vector summary search failed', {
+        projectId,
+        error: error.message
+      });
+      throw error;
     }
   }
 }

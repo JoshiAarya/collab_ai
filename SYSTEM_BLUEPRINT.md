@@ -251,6 +251,16 @@ CollabAI is a web application that lets registered users create projects, organi
 
 **Indexes:** `{ projectId }`.
 
+### 4.11 ProjectBrief (21 lines, `models/ProjectBrief.js`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `projectId` | ObjectId → Project | Required, **unique** |
+| `content` | String | Required. The LLM-generated brief content. |
+| `generatedAt` | Date | Default: `Date.now` |
+
+**Indexes:** `{ projectId }` (unique).
+
 ---
 
 ## Section 5 — API Reference
@@ -406,6 +416,15 @@ CollabAI is a web application that lets registered users create projects, organi
 #### GET `/:projectId/decisions` — List decisions
 - **Execution:** `Decision.find({ projectId }).sort({ timestamp: -1 })`
 
+#### GET `/:projectId/brief` — Get Project Brief
+- **Auth:** Must be project member.
+- **Execution:** `briefService.getOrGenerateBrief(projectId)`. Returns existing brief if generated within the last 24 hours. Otherwise, automatically regenerates it.
+- **Failures:** If generation fails but a stale brief exists, returns the stale brief with `isOutdatedFallback: true`.
+
+#### POST `/:projectId/brief/generate` — Force Generate Brief
+- **Auth:** Must be project member.
+- **Execution:** `briefService.generateBrief(projectId)`. Forces a regeneration regardless of cache age.
+
 ### WebSocket Events
 
 #### Client → Server
@@ -464,7 +483,8 @@ CollabAI is a web application that lets registered users create projects, organi
    a. Checks if `isCatchMeUp` via regex (`/catch me up|what's the current state|.../i`)
    b. Calls `buildProjectContext()`:
       - Parallel: `getProjectById`, `getDiscussionById`, `getProjectDiscussions`, `getDiscussionSummaries(discussionId, 3)`, `getDiscussionMessages(discussionId, 30)`
-      - If prompt exists: embeds prompt → `VectorStore.searchMessages(projectId, embedding, 15)` → `VectorStore.searchDecisions(projectId, embedding, 8)` → `VectorStore.search(projectId, embedding, 5)` (document chunks)
+      - If prompt exists: embeds prompt → `VectorStore.searchMessages` using **hybrid search** (filters by `discussionId` first, then computes cosine similarity, falling back cross-thread if needed) → `VectorStore.searchDecisions` → `VectorStore.search` (document chunks).
+      - **Decision Pinning:** Retrieves decisions via semantic similarity, then checks if any decision has a cosine similarity > 0.85 against the user's query. If yes, it is pinned (guaranteed to appear in context without competing for space).
       - If `relevantDecisions.length === 0` (no embedded decisions): fallback loads `Decision.find({ projectId }).sort({ timestamp: -1 }).limit(15).lean()`
       - For each non-current discussion: loads 1 summary
    c. Calls `buildSystemPrompt(context)` — builds multi-layered prompt string
@@ -529,6 +549,14 @@ CollabAI is a web application that lets registered users create projects, organi
    - Creates Project with `activeLLM: { provider: 'server', model: 'llama-3.1-8b-instant' }`
    - Creates Discussion `{ title: 'Main Discussion', isMain: true, participants: [ownerId] }`
    - Adds project ID to `User.projects` array
+
+### 6.8 Project Brief Generation
+
+1. Triggered via `GET /api/projects/:projectId/brief` (if stale >24h) or `POST /brief/generate`.
+2. `briefService.generateBrief()` collects: All project decisions, the last 10 summaries, and the last 30 messages from the Main Discussion.
+3. Assembles a large context string and applies a strict system prompt to enforce exactly five Markdown sections (What We Are Building, Stack and Architecture, Current Focus, Key People, Open Questions).
+4. Calls `AIOrchestrator.callProvider()` with `maxTokens: 2000`.
+5. Saves to the `ProjectBrief` collection with `generatedAt: new Date()` and returns it to the client.
 
 ---
 

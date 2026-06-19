@@ -19,19 +19,19 @@ export async function runSimulation({ projectTitle, projectDesc, usersToCreate, 
 
   const normalizedTitle = projectTitle.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   const LOG_FILE = path.join(__dirname, `../../../simulate-${normalizedTitle}.log`);
-  
-// ─── Manual Decision Extraction ──────────────────────────────────────────────
-async function triggerDecisionAPI(projectId, messageId, text, username, discussionId) {
 
-  try {
-    const AIOrchestrator = (await import('../../core/orchestrator/AIOrchestrator.js')).default;
-    const Decision = (await import('../../models/Decision.js')).default;
-    const EmbeddingService = (await import('../../core/embeddings/EmbeddingService.js')).default;
-    const User = (await import('../../models/User.js')).default;
+  // ─── Manual Decision Extraction ──────────────────────────────────────────────
+  async function triggerDecisionAPI(projectId, messageId, text, username, discussionId) {
 
-    const user = await User.findOne({ username });
+    try {
+      const AIOrchestrator = (await import('../../core/orchestrator/AIOrchestrator.js')).default;
+      const Decision = (await import('../../models/Decision.js')).default;
+      const EmbeddingService = (await import('../../core/embeddings/EmbeddingService.js')).default;
+      const User = (await import('../../models/User.js')).default;
 
-    const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.
+      const user = await User.findOne({ username });
+
+      const prompt = `You are normalizing a raw engineering conversation message into a clean decision record.
 Speaker: ${username}
 Raw message: "${text}"
 
@@ -45,7 +45,7 @@ Write a single clean declarative statement capturing the decision made. Rules:
 Return ONLY valid JSON with no markdown: {"text": "...", "rationale": "..."}
 Rationale can be empty string if no clear reason given.`;
 
-    const response = await AIOrchestrator.callProvider({
+      const response = await AIOrchestrator.callProvider({
         requestId: crypto.randomUUID(),
         provider: 'groq',
         model: 'llama-3.1-8b-instant',
@@ -54,47 +54,47 @@ Rationale can be empty string if no clear reason given.`;
         projectId,
         userId: user._id,
         maxTokens: 1024
-    });
+      });
 
-    let parsed;
-    try {
-      const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch(e) {
-      write('         ↳ error parsing LLM response\n');
-      return;
-    }
-
-    const decision = await Decision.create({
-      projectId,
-      text: parsed.text,
-      rationale: parsed.rationale || '',
-      proposedBy: {
-        userId: user._id,
-        username
-      },
-      sourceMessageId: messageId,
-      discussionId
-    });
-
-    // Embed the decision for semantic retrieval
-    try {
-      const textToEmbed = parsed.text + (parsed.rationale ? '. ' + parsed.rationale : '');
-      const embedding = await EmbeddingService.embedText(textToEmbed);
-      if (embedding) {
-        await Decision.findByIdAndUpdate(decision._id, { embedding, embeddingStatus: 'done' });
+      let parsed;
+      try {
+        const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        write('         ↳ error parsing LLM response\n');
+        return;
       }
-    } catch (embedErr) {
-      await Decision.findByIdAndUpdate(decision._id, { embeddingStatus: 'failed' });
+
+      const decision = await Decision.create({
+        projectId,
+        text: parsed.text,
+        rationale: parsed.rationale || '',
+        proposedBy: {
+          userId: user._id,
+          username
+        },
+        sourceMessageId: messageId,
+        discussionId
+      });
+
+      // Embed the decision for semantic retrieval
+      try {
+        const textToEmbed = parsed.text + (parsed.rationale ? '. ' + parsed.rationale : '');
+        const embedding = await EmbeddingService.embedText(textToEmbed);
+        if (embedding) {
+          await Decision.findByIdAndUpdate(decision._id, { embedding, embeddingStatus: 'done' });
+        }
+      } catch (embedErr) {
+        await Decision.findByIdAndUpdate(decision._id, { embeddingStatus: 'failed' });
+      }
+      write(`         ↳ decision saved: ${parsed.text.substring(0, 40)}\n`);
+    } catch (err) {
+      write(`         ↳ decision fail: ${err.message}\n`);
     }
-    write(`         ↳ decision saved: ${parsed.text.substring(0, 40)}\n`);
-  } catch (err) {
-    write(`         ↳ decision fail: ${err.message}\n`);
   }
-}
 
 
-const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
+  const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
 
   const origStdoutWrite = process.stdout.write.bind(process.stdout);
   const origStderrWrite = process.stderr.write.bind(process.stderr);
@@ -203,7 +203,7 @@ const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
     if (isDecision && !SKIP_DECISIONS) {
       await triggerDecisionAPI(project._id, message._id, text, username, discussion._id);
     }
-    
+
     // Embed message
     try {
       const EmbeddingService = (await import('../../core/embeddings/EmbeddingService.js')).default;
@@ -221,7 +221,7 @@ const logStream = fs.createWriteStream(LOG_FILE, { flags: 'w' });
           timestamp: simulatedTime.getTime()
         });
       }
-    } catch(err) {
+    } catch (err) {
       write(`         ↳ embed fail: ${err.message}\n`);
     }
 

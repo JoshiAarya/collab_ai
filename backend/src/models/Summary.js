@@ -32,6 +32,11 @@ const summarySchema = new mongoose.Schema({
     type: [Number],
     default: null
   },
+  embeddingStatus: {
+    type: String,
+    enum: ['pending', 'done', 'failed'],
+    default: 'pending'
+  },
   // How many messages the discussion had when this summary was created.
   // Used to detect stale summaries (discussion grew significantly after summarizing).
   messageCountAtSummary: {

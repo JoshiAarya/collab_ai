@@ -20,6 +20,7 @@ function AppContent() {
   const [isJoining, setIsJoining] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [oauthHandled, setOauthHandled] = useState(false);
+  const [projectsRefreshKey, setProjectsRefreshKey] = useState(0);
 
   // Check for invite link in URL
   useEffect(() => {
@@ -81,6 +82,7 @@ function AppContent() {
         clearUrl();
         setInviteCode(null);
         setShowInviteModal(false);
+        setProjectsRefreshKey(prev => prev + 1);
         
         // Show appropriate success message
         if (discussionId) {
@@ -232,7 +234,7 @@ function AppContent() {
 
   return (
     <>
-      <ProjectList onSelectProject={setSelectedProject} />
+      <ProjectList key={projectsRefreshKey} onSelectProject={setSelectedProject} />
       {showInviteModal && (
         <InviteConfirmModal
           inviteCode={inviteCode}

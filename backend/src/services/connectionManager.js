@@ -192,6 +192,18 @@ class ConnectionManager {
         return;
       }
 
+      // Check private discussion access
+      if (discussion.isPrivate) {
+        const isParticipant = discussion.participants.some(p => {
+          const pId = p._id ? p._id.toString() : p.toString();
+          return pId === meta.userId.toString();
+        });
+        if (!isParticipant) {
+          this.sendError(ws, 'Access denied to this private discussion');
+          return;
+        }
+      }
+
       // Update metadata
       meta.projectId = projectId;
       meta.discussionId = discussionId;
@@ -204,7 +216,8 @@ class ConnectionManager {
         text: m.text,
         time: m.timestamp,
         isAI: m.isAI,
-        isSaved: !!m.isSaved
+        isSaved: !!m.isSaved,
+        sources: m.sources
       }));
 
       this.send(ws, { 
@@ -318,7 +331,7 @@ class ConnectionManager {
       });
 
       // Stream the response — each chunk is broadcast in real-time
-      const fullResponse = await AIOrchestrator.handleStreamingRequest(
+      const { fullText, sources } = await AIOrchestrator.handleStreamingRequest(
         {
           projectId,
           discussionId,
@@ -341,11 +354,12 @@ class ConnectionManager {
         projectId,
         null,
         'CollabAI',
-        fullResponse,
-        true
+        fullText,
+        true,
+        sources || null
       );
 
-      // Broadcast the final saved message (with _id for memory button)
+      // Broadcast the final saved message (with _id for memory button + source attribution)
       this.broadcastToDiscussion(discussionId, {
         type: 'ai-stream-end',
         message: {
@@ -354,14 +368,15 @@ class ConnectionManager {
           text: aiMessage.text,
           time: aiMessage.timestamp,
           isAI: true
-        }
+        },
+        sources: sources || null
       });
 
       logger.ai('Streaming response complete', { 
         projectId, 
         discussionId, 
         promptLength: prompt.length,
-        responseLength: fullResponse.length
+        responseLength: fullText.length
       });
 
     } catch (error) {

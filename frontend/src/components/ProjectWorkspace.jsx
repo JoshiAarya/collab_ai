@@ -143,7 +143,9 @@ export default function ProjectWorkspace({ project, onBack }) {
       return; // older history was prepended — keep the user's scroll position
     }
     if (!highlightedMessageId) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        endRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   }, [messages]);
 
@@ -168,7 +170,8 @@ export default function ProjectWorkspace({ project, onBack }) {
         if (data.messages.length > 0) {
           const older = data.messages.map(m => ({
             _id: m._id, user: m.user, text: m.text,
-            time: m.timestamp, isAI: m.isAI, isSaved: !!m.isSaved
+            time: m.timestamp, isAI: m.isAI, isSaved: !!m.isSaved,
+            sources: m.sources
           }));
           setSavedMessageIds(prev => {
             const next = new Set(prev);
@@ -324,7 +327,10 @@ export default function ProjectWorkspace({ project, onBack }) {
         setStreamingText('');
         streamingTextRef.current = '';
         if (data.message) {
-          setMessages(prev => [...prev, data.message]);
+          const messageWithSources = data.sources
+            ? { ...data.message, sources: data.sources }
+            : data.message;
+          setMessages(prev => [...prev, messageWithSources]);
         }
       } else if (data.type === 'ai-error') {
         setAiThinking(false);
@@ -592,6 +598,34 @@ export default function ProjectWorkspace({ project, onBack }) {
           </button>
         </div>
 
+        {/* Project Name Header */}
+        <div style={{
+          padding: '12px 16px 12px',
+          borderBottom: `1px solid ${colors.border}`
+        }}>
+          <span style={{
+            fontSize: '9px',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            fontWeight: '500',
+            display: 'block',
+            marginBottom: '2px',
+            opacity: 0.7
+          }}>Active Project</span>
+          <h3 style={{
+            margin: 0,
+            fontSize: '13px',
+            fontWeight: '500',
+            color: colors.text,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }} title={project.title}>
+            {project.title}
+          </h3>
+        </div>
+
         <div style={styles.discussionsList}>
           <div style={styles.discussionsHeader}>
             <span style={styles.discussionsLabel}>Discussions</span>
@@ -661,12 +695,22 @@ export default function ProjectWorkspace({ project, onBack }) {
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4z"/>
                       </svg>
+                    ) : disc.isPrivate ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#eab308" strokeWidth="2" title="Private Discussion">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
                     ) : (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                       </svg>
                     )}
                     <span style={styles.discussionName}>{displayTitle}</span>
+                    {disc.isPrivate && (
+                      <span style={{ fontSize: '10px', color: '#eab308', background: 'rgba(234,179,8,0.15)', padding: '1px 4px', borderRadius: '4px', marginLeft: '4px' }}>
+                        Private
+                      </span>
+                    )}
                     {isStaleSummary && (
                       <span title="Summary may be outdated" style={{ fontSize: '12px', marginLeft: '2px' }}>⚠️</span>
                     )}
@@ -848,7 +892,7 @@ export default function ProjectWorkspace({ project, onBack }) {
             </div>
           ) : (
             <>
-              {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} colors={colors} onAddToMemory={() => handleAddToMemory(m)} isSaving={savingMessageIds.has(m._id)} isSaved={savedMessageIds.has(m._id)} />)}
+              {messages.map((m, i) => <MessageBubble key={i} message={m} currentUser={user?.username} colors={colors} onAddToMemory={() => handleAddToMemory(m)} isSaving={savingMessageIds.has(m._id)} isSaved={savedMessageIds.has(m._id)} onNavigateToDashboard={() => setShowDashboard(true)} onNavigateToMessage={(discId, msgId) => handleSourceClick(discId, msgId)} />)}
               {(aiThinking || isStreaming) && (
                 <div className="msg-bubble-row ai-message-row" style={{
                   padding: '16px 0', width: '100%',
@@ -1004,7 +1048,7 @@ export default function ProjectWorkspace({ project, onBack }) {
         <CreateDiscussionModal
           colors={colors}
           onClose={() => setShowCreateDiscussion(false)}
-          onCreate={async (name) => {
+          onCreate={async (name, isPrivate) => {
             try {
               const response = await apiRequest(
                 `/api/projects/${project._id}/discussions`,
@@ -1014,7 +1058,7 @@ export default function ProjectWorkspace({ project, onBack }) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                   },
-                  body: JSON.stringify({ title: name })
+                  body: JSON.stringify({ title: name, isPrivate })
                 }
               );
               const data = await response.json();

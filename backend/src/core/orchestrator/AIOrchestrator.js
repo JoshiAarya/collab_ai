@@ -53,7 +53,7 @@ class AIOrchestrator {
 
     const selectedModel = this.selectModel(llmConfig);
     const isCatchMeUp = /catch me up|what's the current state|what have we decided|summarize the project|onboard me/i.test(prompt);
-    const context = await this.buildProjectContext({ projectId, discussionId, prompt });
+    const context = await this.buildProjectContext({ projectId, discussionId, prompt, isCatchMeUp });
 
     let systemPrompt = null;
     if (isCatchMeUp) {
@@ -67,13 +67,16 @@ class AIOrchestrator {
     const { messages: trimmedMessages } = TokenManager.trimContext(context, messages, selectedModel.model, requestId);
     messages = trimmedMessages;
 
-    return { requestId, selectedModel, context, messages, systemPrompt };
+    // Extract deterministic source attribution from the retrieved context
+    const sources = this.extractSources(context, isCatchMeUp);
+
+    return { requestId, selectedModel, context, messages, systemPrompt, sources };
   }
 
   async handleRequest(params) {
-    const { projectId, userId } = params;
+    const { projectId, userId, discussionId } = params;
     try {
-      const { requestId, selectedModel, context, messages } = await this._prepareRequest(params);
+      const { requestId, selectedModel, context, messages, sources } = await this._prepareRequest(params);
 
       const response = await this.callProvider({
         requestId,
@@ -85,11 +88,12 @@ class AIOrchestrator {
         messagesOverride: messages,
         projectId,
         userId,
+        discussionId,
         maxTokens: 1024
       });
 
       logger.ai('Response generated', { requestId, provider: selectedModel.provider, responseLength: response.length });
-      return response;
+      return { response, sources };
 
     } catch (error) {
       if (!(error instanceof RateLimitError)) {
@@ -104,12 +108,12 @@ class AIOrchestrator {
    * Returns the full accumulated response text
    */
   async handleStreamingRequest(params, onChunk) {
-    const { projectId, userId } = params;
+    const { projectId, userId, discussionId } = params;
     try {
-      const { requestId, selectedModel, messages } = await this._prepareRequest(params);
+      const { requestId, selectedModel, messages, sources } = await this._prepareRequest(params);
       const provider = selectedModel.provider;
       const model = selectedModel.model;
-      const apiKey = await this.getApiKey(provider, projectId);
+      const apiKey = await this.getApiKey(provider, projectId, userId, discussionId);
       const maxTokens = 1024;
 
       const streamer = {
@@ -128,7 +132,7 @@ class AIOrchestrator {
           streamer
         );
         logger.ai('Streaming response complete', { requestId, provider, responseLength: fullText.length });
-        return fullText;
+        return { fullText, sources };
       }
 
       // Fallback: non-streaming for unknown providers
@@ -137,7 +141,7 @@ class AIOrchestrator {
         prompt: params.prompt, messagesOverride: messages, projectId, userId, maxTokens
       });
       onChunk(response); // send as single chunk
-      return response;
+      return { fullText: response, sources };
 
     } catch (error) {
       if (!(error instanceof RateLimitError)) {
@@ -188,7 +192,7 @@ class AIOrchestrator {
     return merged;
   }
 
-  async buildProjectContext({ projectId, discussionId, prompt }) {
+  async buildProjectContext({ projectId, discussionId, prompt, isCatchMeUp = false }) {
     const [
       project,
       discussion,
@@ -206,14 +210,23 @@ class AIOrchestrator {
     let pastMessages = [];
     let documents = [];
     let relevantDecisions = [];
+    let pinnedDecisions = [];
+    let relevantSummaries = [];
 
     if (prompt) {
       try {
         const queryEmbedding = await EmbeddingService.embedText(prompt);
-        pastMessages = await VectorStore.searchMessages(projectId, queryEmbedding, 15);
+        pastMessages = await VectorStore.searchMessages(projectId, queryEmbedding, 15, discussionId);
+        
+        // Semantic summary retrieval — top 3 most relevant summaries
+        relevantSummaries = await VectorStore.searchSummaries(projectId, queryEmbedding, 3);
         
         // Semantic decision retrieval — top 8 most relevant decisions
         relevantDecisions = await VectorStore.searchDecisions(projectId, queryEmbedding, 8);
+        
+        // High-confidence decision pinning
+        pinnedDecisions = relevantDecisions.filter(d => d.similarity !== null && d.similarity > 0.85);
+        relevantDecisions = relevantDecisions.filter(d => d.similarity === null || d.similarity <= 0.85);
 
         const chunkCount = await VectorStore.count(projectId);
         if (chunkCount > 0) {
@@ -227,8 +240,16 @@ class AIOrchestrator {
            const docs = await documentService.getProjectDocuments(projectId);
            documents = docs.slice(0, 3).map(d => ({
              title: d.title,
-             content: d.content.substring(0, 2000)
+             content: d.content.substring(0, 2000),
+             similarity: null // no ranking
            }));
+        }
+
+        if (!isCatchMeUp) {
+          pastMessages = pastMessages.filter(m => m.similarity === null || m.similarity >= 0.35);
+          relevantSummaries = relevantSummaries.filter(s => s.similarity === null || s.similarity >= 0.35);
+          relevantDecisions = relevantDecisions.filter(d => d.similarity === null || d.similarity >= 0.20);
+          documents = documents.filter(d => d.similarity === null || d.similarity >= 0.35);
         }
       } catch (err) {
         logger.warn('Semantic search failed in context builder', { error: err.message });
@@ -252,13 +273,22 @@ class AIOrchestrator {
       }
     }
 
-    const otherDiscussions = [];
+    // Build a discussionId → title map for source attribution on past messages
+    const discussionTitleMap = {};
     for (const disc of allDiscussions) {
-      if (disc._id.toString() === discussionId.toString()) continue;
-      const discSummaries = await summaryService.getDiscussionSummaries(disc._id, 1);
-      if (discSummaries.length > 0) {
-        otherDiscussions.push({ title: disc.title, summary: discSummaries[0].content });
-      }
+      discussionTitleMap[disc._id.toString()] = disc.title;
+    }
+
+    // Fallback: if no semantic summaries found, use the current discussion's recent summaries
+    if (relevantSummaries.length === 0 && summaries && summaries.length > 0) {
+      relevantSummaries = summaries.map(s => ({
+        id: s._id,
+        discussionId: s.discussionId,
+        title: discussionTitleMap[s.discussionId?.toString()] || 'Discussion',
+        content: s.content,
+        createdAt: s.createdAt,
+        similarity: null // no ranking
+      }));
     }
 
     // Pinned project state — a compact, always-injected grounding summary.
@@ -281,13 +311,68 @@ class AIOrchestrator {
         title: discussion.title,
         isMain: discussion.isMain
       } : null,
+      pinnedDecisions,
       decisions: relevantDecisions,
-      otherDiscussions,
-      recentMessages: recentMessages.map(m => ({ user: m.user, text: m.text, timestamp: m.timestamp })),
+      summaries: relevantSummaries,
       pastMessages,
       documents,
-      summaries: summaries.map(s => s.content)
+      recentMessages: recentMessages.map(m => ({ user: m.user, text: m.text, timestamp: m.timestamp })),
+      discussionTitleMap
     };
+  }
+
+  /**
+   * Extract deterministic source attribution from the retrieved context.
+   * Returns a compact sources object suitable for sending to the frontend.
+   */
+  extractSources(context, isCatchMeUp = false) {
+    const sources = { decisions: [], messages: [], summaries: [], documents: [] };
+
+    const allDecisions = [
+      ...(context.pinnedDecisions || []),
+      ...(context.decisions || [])
+    ];
+
+    if (allDecisions.length > 0) {
+      sources.decisions = allDecisions
+        .map(d => ({
+          text: d.text,
+          proposedBy: d.proposedBy?.username || 'team',
+          timestamp: d.timestamp
+        }));
+    }
+
+    if (context.pastMessages?.length > 0) {
+      sources.messages = context.pastMessages
+        .map(m => ({
+          username: m.username || m.user || 'Unknown',
+          discussionId: m.discussionId?.toString() || null,
+          discussionTitle: (m.discussionId && context.discussionTitleMap?.[m.discussionId.toString()]) || 'Discussion',
+          messageId: m.messageId?.toString() || null,
+          timestamp: m.timestamp,
+          snippet: (m.content || '').substring(0, 100)
+        }));
+    }
+
+    if (context.summaries?.length > 0) {
+      sources.summaries = context.summaries
+        .map(s => ({
+          discussionId: s.discussionId?.toString() || null,
+          discussionTitle: context.discussionTitleMap?.[s.discussionId?.toString()] || s.title || 'Discussion',
+          timestamp: s.createdAt
+        }));
+    }
+
+    if (context.documents?.length > 0) {
+      sources.documents = context.documents
+        .map(d => ({
+          title: d.title || 'Untitled Document'
+        }));
+    }
+
+    // Only return sources that actually have entries
+    const totalSources = sources.decisions.length + sources.messages.length + sources.summaries.length + sources.documents.length;
+    return totalSources > 0 ? sources : null;
   }
 
   buildSystemPrompt(context) {
@@ -308,6 +393,19 @@ Be conversational, concise, and natural. Use the project context below to give a
       prompt += `Current Discussion: ${context.discussion.title}${context.discussion.isMain ? ' (main thread)' : ''}\n\n`;
     }
 
+    // PINNED LAYER: High-Confidence Decisions
+    if (context.pinnedDecisions?.length > 0) {
+      prompt += `## EXPLICITLY PINNED DECISIONS\nThe following decisions perfectly match the user's query (>0.85 similarity) and MUST be prioritized in your response:\n`;
+      context.pinnedDecisions.forEach((d, i) => {
+        const date = d.timestamp ? new Date(d.timestamp).toLocaleDateString() : '';
+        const who = d.proposedBy?.username || 'team';
+        prompt += `${i+1}. ${d.text}`;
+        if (d.rationale) prompt += ` (rationale: ${d.rationale})`;
+        prompt += ` — ${who}, ${date}\n`;
+      });
+      prompt += `\n`;
+    }
+
     // LAYER 1: Relevant Decisions — semantically retrieved, not a monolith
     if (context.decisions?.length > 0) {
       prompt += `## Verified Ground Truth — Project Decisions\nThese are human-verified decisions captured by team members. Treat as authoritative facts.\n`;
@@ -321,11 +419,12 @@ Be conversational, concise, and natural. Use the project context below to give a
       prompt += `\n`;
     }
 
-    // LAYER 2: Parallel Discussion Summaries
-    if (context.otherDiscussions?.length > 0) {
-      prompt += `## Parallel Discussions\n`;
-      context.otherDiscussions.forEach(disc => {
-        prompt += `\n[${disc.title}]\n${disc.summary}\n`;
+    // LAYER 2: Semantic Summaries
+    if (context.summaries?.length > 0) {
+      prompt += `## Relevant Context (Discussion Summaries)\n`;
+      context.summaries.forEach(s => {
+        const title = context.discussionTitleMap?.[s.discussionId?.toString()] || s.title || 'Discussion';
+        prompt += `\n[${title}]\n${s.content}\n`;
       });
       prompt += `\n`;
     }
@@ -374,7 +473,8 @@ Be conversational, concise, and natural. Use the project context below to give a
     let { 
       requestId, provider, model, context, prompt, 
       messagesOverride, systemPrompt = null,
-      temperature = 0.7, maxTokens = null, projectId 
+      temperature = 0.7, maxTokens = null, projectId,
+      userId, discussionId
     } = params;
 
     if (provider === 'server' && model === 'server') {
@@ -395,7 +495,7 @@ Be conversational, concise, and natural. Use the project context below to give a
     const result = await LLMGuardrails.guardedCall(
       { requestId, provider, model, messages, projectId },
       async () => {
-        const apiKey = await this.getApiKey(provider, projectId);
+        const apiKey = await this.getApiKey(provider, projectId, userId, discussionId);
         switch (provider) {
           case 'groq':
           case 'server':
@@ -421,11 +521,31 @@ Be conversational, concise, and natural. Use the project context below to give a
     return result.content || result;
   }
 
-  async getApiKey(provider, projectId) {
+  async getApiKey(provider, projectId, userId, discussionId) {
     if (provider === 'groq' || provider === 'server') {
       const encryptedKey = process.env.GROQ_API_KEY || process.env.CHATBOT_API_KEY;
       return EncryptionService.decryptForUse(encryptedKey);
     }
+
+    // Check if in private discussion and user has their own key configured
+    if (discussionId && userId) {
+      try {
+        const discussion = await discussionService.getDiscussionById(discussionId);
+        if (discussion && discussion.isPrivate) {
+          const User = (await import('../../models/User.js')).default;
+          const user = await User.findById(userId).select('+apiKeys');
+          if (user && user.apiKeys && typeof user.apiKeys.get === 'function') {
+            const userKey = user.apiKeys.get(provider);
+            if (userKey) {
+              return EncryptionService.decryptForUse(userKey);
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to retrieve user API key for private discussion', { error: err.message });
+      }
+    }
+
     const key = await projectService.getProjectApiKey(projectId, provider);
     if (!key) throw new Error(`No API key configured for provider: ${provider}`);
     return EncryptionService.decryptForUse(key);

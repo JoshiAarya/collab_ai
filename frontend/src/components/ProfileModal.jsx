@@ -22,8 +22,20 @@ export default function ProfileModal({ onClose }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Custom API keys state
+  const [userKeys, setUserKeys] = useState({});
+  const [keyInputs, setKeyInputs] = useState({
+    openai: '',
+    anthropic: '',
+    google: '',
+    deepseek: '',
+    xai: ''
+  });
+  const [savingKeys, setSavingKeys] = useState({});
+
   useEffect(() => {
     loadStats();
+    loadUserKeys();
   }, []);
 
   const loadStats = async () => {
@@ -37,6 +49,72 @@ export default function ProfileModal({ onClose }) {
       }
     } catch (error) {
       console.error('Failed to load stats:', error);
+    }
+  };
+
+  const loadUserKeys = async () => {
+    try {
+      const response = await apiRequest('/api/user/api-keys', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserKeys(data.apiKeys || {});
+      }
+    } catch (error) {
+      console.error('Failed to load user keys:', error);
+    }
+  };
+
+  const handleSaveKey = async (provider) => {
+    const keyVal = keyInputs[provider];
+    if (!keyVal.trim()) return;
+
+    setSavingKeys(prev => ({ ...prev, [provider]: true }));
+    try {
+      const response = await apiRequest('/api/user/api-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ provider, apiKey: keyVal.trim() })
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success(`${provider.toUpperCase()} API key saved!`);
+        setKeyInputs(prev => ({ ...prev, [provider]: '' }));
+        loadUserKeys();
+      } else {
+        toast.error(data.error || 'Failed to save API key');
+      }
+    } catch {
+      toast.error('Failed to save API key');
+    } finally {
+      setSavingKeys(prev => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const handleDeleteKey = async (provider) => {
+    setSavingKeys(prev => ({ ...prev, [provider]: true }));
+    try {
+      const response = await apiRequest(`/api/user/api-keys/${provider}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.info(`${provider.toUpperCase()} API key deleted!`);
+        loadUserKeys();
+      } else {
+        toast.error(data.error || 'Failed to delete key');
+      }
+    } catch {
+      toast.error('Failed to delete key');
+    } finally {
+      setSavingKeys(prev => ({ ...prev, [provider]: false }));
     }
   };
 
@@ -180,6 +258,15 @@ export default function ProfileModal({ onClose }) {
                 Password
               </button>
             )}
+            <button
+              onClick={() => setActiveTab('apikeys')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'apikeys' ? styles.tabActive : {})
+              }}
+            >
+              API Keys
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -266,6 +353,120 @@ export default function ProfileModal({ onClose }) {
                   {loading ? 'Changing...' : 'Change Password'}
                 </button>
               </form>
+            )}
+
+            {activeTab === 'apikeys' && (
+              <div>
+                <p style={{
+                  fontSize: '13px',
+                  color: colors.textSecondary,
+                  marginBottom: '20px',
+                  lineHeight: '1.5'
+                }}>
+                  These keys are stored securely in your user profile and encrypted. They are used **exclusively** for chats inside your private discussions, giving you full control over usage and billing.
+                </p>
+
+                {['openai', 'anthropic', 'google', 'deepseek', 'xai'].map(provider => {
+                  const isConfigured = userKeys[provider];
+                  const displayName = {
+                    openai: 'OpenAI (GPT-4o, etc.)',
+                    anthropic: 'Anthropic (Claude 3.5, etc.)',
+                    google: 'Google Gemini (Gemini 2.5, etc.)',
+                    deepseek: 'DeepSeek (Chat/Reasoner)',
+                    xai: 'xAI Grok'
+                  }[provider];
+
+                  return (
+                    <div 
+                      key={provider} 
+                      style={{
+                        padding: '16px',
+                        background: colors.background,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: '12px',
+                        marginBottom: '16px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: '600', color: colors.text }}>
+                          {displayName}
+                        </label>
+                        {isConfigured ? (
+                          <span style={{
+                            fontSize: '11px',
+                            color: '#10a37f',
+                            background: 'rgba(16,163,127,0.12)',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            ● Configured
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '11px',
+                            color: colors.textTertiary,
+                            fontWeight: '500'
+                          }}>
+                            Not configured
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="password"
+                          value={keyInputs[provider]}
+                          onChange={(e) => setKeyInputs(prev => ({ ...prev, [provider]: e.target.value }))}
+                          placeholder={isConfigured ? '••••••••••••••••••••••••' : `Enter your ${provider} API key`}
+                          style={{
+                            ...styles.input,
+                            flex: 1
+                          }}
+                        />
+                        <button
+                          onClick={() => handleSaveKey(provider)}
+                          disabled={!keyInputs[provider].trim() || savingKeys[provider]}
+                          style={{
+                            padding: '10px 16px',
+                            background: colors.primary,
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            opacity: (!keyInputs[provider].trim() || savingKeys[provider]) ? 0.5 : 1
+                          }}
+                        >
+                          Save
+                        </button>
+                        {isConfigured && (
+                          <button
+                            onClick={() => handleDeleteKey(provider)}
+                            disabled={savingKeys[provider]}
+                            style={{
+                              padding: '10px 16px',
+                              background: '#ef4444',
+                              border: 'none',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

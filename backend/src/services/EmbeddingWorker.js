@@ -19,6 +19,7 @@ class EmbeddingWorker {
     this.stats = {
       messagesBackfilled: 0,
       decisionsBackfilled: 0,
+      summariesBackfilled: 0,
       failures: 0,
       lastRunAt: null
     };
@@ -56,6 +57,7 @@ class EmbeddingWorker {
     try {
       await this.backfillMessages();
       await this.backfillDecisions();
+      await this.backfillSummaries();
       this.stats.lastRunAt = new Date();
     } catch (err) {
       logger.error('[EmbeddingWorker] Run failed', { error: err.message });
@@ -200,6 +202,63 @@ class EmbeddingWorker {
       }
     } catch (err) {
       logger.error('[EmbeddingWorker] Decision backfill failed', { error: err.message });
+    }
+  }
+
+  /**
+   * Find summaries that don't have embeddings yet (pending or failed)
+   */
+  async backfillSummaries() {
+    try {
+      const [
+        { default: Summary },
+        { default: EmbeddingService }
+      ] = await Promise.all([
+        import('../models/Summary.js'),
+        import('../core/embeddings/EmbeddingService.js')
+      ]);
+
+      const unembedded = await Summary.find({
+        $or: [
+          { embeddingStatus: { $in: ['pending', 'failed'] } },
+          { embedding: null } // Handle older schema documents
+        ]
+      })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+
+      if (unembedded.length === 0) return;
+
+      logger.info('[EmbeddingWorker] Backfilling summaries', {
+        found: unembedded.length
+      });
+
+      let count = 0;
+      for (const sum of unembedded) {
+        try {
+          const embedding = await EmbeddingService.embedText(sum.content);
+          if (!embedding) continue;
+
+          await Summary.findByIdAndUpdate(sum._id, {
+            embedding,
+            embeddingStatus: 'done'
+          });
+          count++;
+        } catch (err) {
+          logger.warn('[EmbeddingWorker] Failed to embed summary', {
+            summaryId: sum._id,
+            error: err.message
+          });
+        }
+      }
+
+      if (count > 0) {
+        this.stats.summariesBackfilled += count;
+        logger.info('[EmbeddingWorker] Summaries backfilled', { count });
+      }
+    } catch (err) {
+      logger.error('[EmbeddingWorker] Summary backfill failed', { error: err.message });
     }
   }
 

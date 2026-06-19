@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import apiRequest from '../utils/api.js';
+import ProjectBriefTab from './workspace/ProjectBriefTab.jsx';
 
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
 const severityColor = (s) => ({ low: '#f59e0b', medium: '#f97316', high: '#ef4444' }[s] || '#f97316');
@@ -23,6 +24,7 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState('decisions');
   const ITEMS_PER_PAGE = 6;
 
   useEffect(() => {
@@ -137,18 +139,30 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
       <div style={styles.accentLine} />
 
       <div className="dashboard-content" style={styles.content}>
-        {/* Project state header */}
-        {!loading && projectState && (
-          <div style={{ ...styles.stateBar, background: colors.surface, border: `1px solid ${colors.border}` }}>
-            <StatChip label="Stage" value={cap(projectState.stage)} color="#667eea" colors={colors} />
-            <StatChip label="Momentum" value={cap(projectState.momentum)} color="#8b5cf6" colors={colors} />
-            <StatChip label="Open Blockers" value={projectState.openBlockerCount ?? blockers.length} color="#ef4444" colors={colors} />
-            <StatChip label="Action Items" value={projectState.unresolvedActionCount ?? actionItems.length} color="#f59e0b" colors={colors} />
-            <StatChip label="Topics" value={projectState.activeTopicCount ?? topics.length} color="#10b981" colors={colors} />
-            <StatChip label="Decisions" value={projectState.decisionCount ?? decisions.length} color="#10b981" colors={colors} />
+        {/* Tabs */}
+        <div style={styles.tabContainer}>
+          <button 
+            style={activeTab === 'decisions' ? { ...styles.tabBtn, ...styles.activeTabBtn, color: colors.primary, background: `${colors.primary}15` } : { ...styles.tabBtn, color: colors.textSecondary }}
+            onClick={() => setActiveTab('decisions')}
+          >
+            Decision Log
+          </button>
+          <button 
+            style={activeTab === 'brief' ? { ...styles.tabBtn, ...styles.activeTabBtn, color: colors.primary, background: `${colors.primary}15` } : { ...styles.tabBtn, color: colors.textSecondary }}
+            onClick={() => setActiveTab('brief')}
+          >
+            Project Brief
+          </button>
+        </div>
+
+        {activeTab === 'brief' && (
+          <div style={{ marginTop: '24px' }}>
+            <ProjectBriefTab project={project} token={token} colors={colors} />
           </div>
         )}
 
+        {activeTab === 'decisions' && (
+          <>
         {/* Topics */}
         {!loading && topics.length > 0 && (
           <div style={{ marginBottom: '28px' }}>
@@ -318,6 +332,8 @@ export default function Dashboard({ project, onClose, token, colors, onSourceCli
             )}
           </>
         )}
+          </>
+        )}
       </div>
 
       <style>{`
@@ -467,5 +483,26 @@ const styles = {
   linkBtn: {
     background: 'transparent', border: 'none', padding: 0,
     fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit'
+  },
+  tabContainer: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '24px',
+    justifyContent: 'flex-start'
+  },
+  tabBtn: {
+    background: 'transparent',
+    border: 'none',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s ease',
+    opacity: 0.6,
+    borderRadius: '6px'
+  },
+  activeTabBtn: {
+    opacity: 1
   }
 };

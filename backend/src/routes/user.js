@@ -137,4 +137,72 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get user's custom API keys configuration (booleans indicating if key exists)
+router.get('/api-keys', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('+apiKeys');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const config = {};
+    const providers = ['openai', 'anthropic', 'google', 'deepseek', 'xai'];
+    providers.forEach(p => {
+      config[p] = user.apiKeys && typeof user.apiKeys.has === 'function' ? user.apiKeys.has(p) : false;
+    });
+    
+    res.json({ success: true, apiKeys: config });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save a new custom API key
+router.post('/api-keys', async (req, res) => {
+  try {
+    const { provider, apiKey } = req.body;
+    if (!provider || !apiKey) {
+      return res.status(400).json({ success: false, error: 'Provider and API key are required' });
+    }
+    
+    const user = await User.findById(req.user.userId).select('+apiKeys');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (!user.apiKeys) {
+      user.apiKeys = new Map();
+    }
+    
+    const EncryptionService = (await import('../core/stability/EncryptionService.js')).default;
+    const encrypted = EncryptionService.encryptIfNeeded(apiKey);
+    user.apiKeys.set(provider, encrypted);
+    await user.save();
+    
+    res.json({ success: true, message: 'API key saved successfully' });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a custom API key
+router.delete('/api-keys/:provider', async (req, res) => {
+  try {
+    const { provider } = req.params;
+    const user = await User.findById(req.user.userId).select('+apiKeys');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    if (user.apiKeys && typeof user.apiKeys.has === 'function' && user.apiKeys.has(provider)) {
+      user.apiKeys.delete(provider);
+      await user.save();
+    }
+    
+    res.json({ success: true, message: 'API key deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

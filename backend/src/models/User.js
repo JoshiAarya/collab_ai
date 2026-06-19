@@ -56,7 +56,13 @@ const userSchema = new mongoose.Schema({
   projects: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project'
-  }]
+  }],
+  apiKeys: {
+    type: Map,
+    of: String,
+    default: {},
+    select: false
+  }
 }, {
   timestamps: true
 });
