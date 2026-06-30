@@ -82,7 +82,7 @@ export const schemas = {
   uploadDocument: {
     title: { type: 'string', required: true, min: 1, max: 200 },
     content: { type: 'string', required: true, min: 1, max: 1000000 },
-    fileType: { type: 'enum', required: false, values: ['text', 'pdf'] }
+    fileType: { type: 'string', required: false, max: 100 }
   },
 
   // Message schemas
